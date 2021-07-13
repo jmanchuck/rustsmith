@@ -1,0 +1,37 @@
+cargo-features = ["named-profiles"]
+
+[package]
+name = "generated"
+version = "0.1.0"
+authors = ["jmanchuck <jjcheung0000@gmail.com>"]
+edition = "2018"
+default-run = "generated"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+smith = { path = "../smith" }
+runtime = { path = "../runtime" }
+clap = "2.33.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+indicatif = "0.16.2"
+
+
+[profile.opt0]
+opt-level = 0
+
+[profile.opt1]
+opt-level = 1
+
+[profile.opt2]
+opt-level = 2
+
+[profile.opt3]
+opt-level = 3
+
+[profile.optS]
+opt-level = "s"
+
+[profile.optZ]
+opt-level = "z"

@@ -1,0 +1,6 @@
+/target
+/.VSCodeCounter
+/generated/src/bin/*.rs
+debug/
+release/
+executables/
