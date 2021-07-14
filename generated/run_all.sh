@@ -11,8 +11,12 @@ do
     echo "\"$(basename $dir)\": {" >> ../output.json
     for file in ./*;
     do 
-        output=$(./$file)
-        echo "\"$(basename $file)\": $output," >> ../output.json
+        echo "Checking $file"
+        if [[ -f $file && -x $file ]]; then
+            echo "Running $file"
+            output=$(./$file)
+            echo "\"$(basename $file)\": $output," >> ../output.json
+        fi
     done
     echo "}," >> ../output.json
     cd ..

@@ -6,16 +6,13 @@ cd executables
 
 rm -rf ./*/
 
-mkdir opt3
-mkdir optS 
-mkdir opt0
-
 for file in $generatedPath;
 do
     filename=$(basename $file)
-    cargo +nightly build --bins --profile opt3 -Z unstable-options --out-dir ./opt3
-    cargo +nightly build --bins --profile optS -Z unstable-options --out-dir ./optS
-    cargo +nightly build --bins --profile opt0 -Z unstable-options --out-dir ./opt0
+    cargo build --bins --release --target-dir .
+    cargo build --bins --target-dir .
+    # cargo +nightly build --bins --profile optS --target-dir . -Z unstable-options
+
 done
 
 find . -name "generated" -type f -delete
