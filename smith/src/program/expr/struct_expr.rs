@@ -40,6 +40,10 @@ impl StructLiteral {
             field_values,
         }
     }
+
+    pub fn as_struct_expr(self) -> StructExpr {
+        StructExpr::Literal(self)
+    }
 }
 
 impl ToString for StructLiteral {

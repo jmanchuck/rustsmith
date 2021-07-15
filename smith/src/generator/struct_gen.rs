@@ -138,13 +138,16 @@ impl StructTable {
     }
 
     pub fn rand_type_with_global<R: Rng>(&self, rng: &mut R) -> TypeID {
-        let mut loop_limit = 5;
+        let mut loop_limit = 20;
+
         loop {
-            let selected: TypeIDVariants = rng.gen();
-            loop_limit -= 1;
+            let mut selected: TypeIDVariants = rng.gen();
             if loop_limit < 0 {
-                println!("{:#?}", self.structs);
-                panic!("Multiple attempts to get random type failed");
+                if rng.gen::<bool>() {
+                    selected = TypeIDVariants::IntType;
+                } else {
+                    selected = TypeIDVariants::BoolType;
+                }
             }
             match selected {
                 TypeIDVariants::StructType if self.len() > 0 => {
@@ -152,22 +155,32 @@ impl StructTable {
                 }
 
                 // Inclusive of the NullType
-                TypeIDVariants::IntType | _ => {
+                TypeIDVariants::IntType => {
                     let int_type_id: IntTypeID = rng.gen();
                     return int_type_id.as_type();
+                }
+
+                TypeIDVariants::BoolType => return TypeID::BoolType,
+
+                _ => {
+                    loop_limit -= 1;
+                    continue;
                 }
             }
         }
     }
 
     pub fn rand_type<R: Rng>(&self, rng: &mut R) -> TypeID {
-        let mut loop_limit = 5;
+        let mut loop_limit = 20;
         loop {
-            let selected: TypeIDVariants = rng.gen();
+            let mut selected: TypeIDVariants = rng.gen();
             loop_limit -= 1;
             if loop_limit < 0 {
-                println!("{:#?}", self.structs);
-                panic!("Multiple attempts to get random type failed");
+                if rng.gen::<bool>() {
+                    selected = TypeIDVariants::IntType;
+                } else {
+                    selected = TypeIDVariants::BoolType;
+                }
             }
             match selected {
                 // Can only choose a struct type if the struct table contains previously generated structs
@@ -181,22 +194,32 @@ impl StructTable {
                 }
 
                 // Inclusive of the NullType
-                TypeIDVariants::IntType | _ => {
+                TypeIDVariants::IntType => {
                     let int_type_id: IntTypeID = rng.gen();
                     return int_type_id.as_type();
+                }
+
+                TypeIDVariants::BoolType => return TypeID::BoolType,
+
+                _ => {
+                    loop_limit -= 1;
+                    continue;
                 }
             }
         }
     }
 
     pub fn rand_type_with_null<R: Rng>(&self, rng: &mut R) -> TypeID {
-        let mut loop_limit = 5;
+        let mut loop_limit = 20;
         loop {
-            let selected: TypeIDVariants = rng.gen();
+            let mut selected: TypeIDVariants = rng.gen();
             loop_limit -= 1;
             if loop_limit < 0 {
-                println!("{:#?}", self.structs);
-                panic!("Multiple attempts to get random type failed");
+                if rng.gen::<bool>() {
+                    selected = TypeIDVariants::IntType;
+                } else {
+                    selected = TypeIDVariants::BoolType;
+                }
             }
             match selected {
                 // Can only choose a struct type if the struct table contains previously generated structs
@@ -211,6 +234,7 @@ impl StructTable {
                     let int_type_id: IntTypeID = rng.gen();
                     return int_type_id.as_type();
                 }
+                TypeIDVariants::BoolType => return TypeID::BoolType,
                 _ => continue,
             }
         }

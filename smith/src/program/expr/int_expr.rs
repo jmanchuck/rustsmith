@@ -102,7 +102,11 @@ impl IntExpr {
 
 impl ToString for IntExpr {
     fn to_string(&self) -> String {
-        self.value.to_string()
+        format!(
+            "{}{}",
+            self.value.to_string(),
+            self.value.get_type().to_string()
+        )
     }
 }
 

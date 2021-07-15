@@ -1,4 +1,5 @@
 use crate::program::expr::binary_expr::BinaryOp;
+use crate::program::expr::bool_expr::{BoolOp, ComparisonOp};
 use crate::program::expr::int_expr::IntValue;
 use crate::program::types::{BorrowTypeID, IntTypeID, TypeIDVariants};
 
@@ -114,11 +115,33 @@ impl IntValue {
 
 impl Distribution<BinaryOp> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BinaryOp {
-        match rng.gen_range(0..=4) {
+        match rng.gen_range(0..=3) {
             0 => BinaryOp::ADD,
             1 => BinaryOp::SUB,
             2 => BinaryOp::MUL,
             _ => BinaryOp::DIV,
+        }
+    }
+}
+
+impl Distribution<ComparisonOp> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ComparisonOp {
+        match rng.gen_range(0..=5) {
+            0 => ComparisonOp::Greater,
+            1 => ComparisonOp::GreaterEq,
+            2 => ComparisonOp::Less,
+            3 => ComparisonOp::LessEq,
+            4 => ComparisonOp::Equal,
+            _ => ComparisonOp::NotEqual,
+        }
+    }
+}
+
+impl Distribution<BoolOp> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BoolOp {
+        match rng.gen_range(0..=4) {
+            0 => BoolOp::AND,
+            _ => BoolOp::OR,
         }
     }
 }

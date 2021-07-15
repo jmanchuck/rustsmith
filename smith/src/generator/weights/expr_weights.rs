@@ -4,11 +4,13 @@ use rand::{
 };
 use strum::{EnumCount, IntoEnumIterator};
 
+use crate::program::expr::bool_expr::BoolExprVariants;
 use crate::program::expr::expr::ArithmeticExprVariants;
 use crate::program::expr::struct_expr::StructExprVariants;
 
 // We can modify this const into a static singleton struct and allow sample func to access atomically
 const ARITHMETIC_EXPR_WEIGHTS: [u32; ArithmeticExprVariants::COUNT] = [2, 2, 2, 2];
+const BOOL_EXPR_WEIGHTS: [u32; BoolExprVariants::COUNT] = [2, 1, 2, 2, 2, 1];
 const STRUCT_EXPR_WEIGHTS: [u32; StructExprVariants::COUNT] = [1, 1];
 
 // impl ArithmeticExprVariants {
@@ -27,6 +29,17 @@ impl Distribution<ArithmeticExprVariants> for Standard {
         let choices: Vec<ArithmeticExprVariants> = ArithmeticExprVariants::iter().collect();
 
         let dist = WeightedIndex::new(&ARITHMETIC_EXPR_WEIGHTS).unwrap();
+        let idx = dist.sample(rng);
+
+        choices[idx]
+    }
+}
+
+impl Distribution<BoolExprVariants> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BoolExprVariants {
+        let choices: Vec<BoolExprVariants> = BoolExprVariants::iter().collect();
+
+        let dist = WeightedIndex::new(&BOOL_EXPR_WEIGHTS).unwrap();
         let idx = dist.sample(rng);
 
         choices[idx]

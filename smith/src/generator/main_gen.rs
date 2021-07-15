@@ -34,19 +34,6 @@ pub fn gen_main<R: Rng>(rng: &mut R) -> String {
         program.push_struct_template(struct_template);
     }
 
-    // let mut static_gen = StaticGenerator::new();
-
-    // loop {
-    //     // break on some probability proportional to number of generated statics vs max (linear)
-    //     if rng.gen_range(0.0..1.0) < static_count as f32 / MAX_STATICS as f32 {
-    //         break;
-    //     }
-    //     let static_stmt = static_gen.gen_static(Rc::clone(&current_scope), rng);
-    //     program.push_static_stmt(static_stmt);
-
-    //     static_count += 1;
-    // }
-
     let mut func_gen = FuncGenerator::new(&struct_table, MAX_FUNC_PARAMS);
 
     loop {

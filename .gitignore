@@ -1,6 +1,9 @@
 /target
+*/target/*
 /.VSCodeCounter
 /generated/src/bin/*.rs
 debug/
 release/
 executables/
+.DS_Store
+.rustc_info.json

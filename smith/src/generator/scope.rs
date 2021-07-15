@@ -3,7 +3,7 @@ use rand::Rng;
 
 use crate::program::function::FunctionTemplate;
 use crate::program::struct_template::StructTemplate;
-use crate::program::types::TypeID;
+use crate::program::types::{BorrowTypeID, TypeID};
 use crate::program::var::Var;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -26,13 +26,33 @@ impl ScopeEntry {
         }
     }
 
+    pub fn get_borrow_type(&self) -> BorrowTypeID {
+        match self {
+            Self::Var(entry) => entry.get_borrow_type(),
+            Self::Func(_) => BorrowTypeID::None,
+            Self::Struct(entry) => entry.get_borrow_type(),
+        }
+    }
+
     pub fn is_type(&self, type_id: TypeID) -> bool {
         self.get_type() == type_id
+    }
+
+    pub fn is_borrow_type(&self, borrow_type_id: BorrowTypeID) -> bool {
+        self.get_borrow_type() == borrow_type_id
     }
 
     pub fn is_mut_var(&self) -> bool {
         match self {
             Self::Var(var) => var.is_mut(),
+            _ => false,
+        }
+    }
+
+    pub fn is_mut(&self) -> bool {
+        match self {
+            Self::Var(var) => var.is_mut(),
+            Self::Struct(s) => s.is_mut(),
             _ => false,
         }
     }
@@ -95,6 +115,7 @@ impl FuncScopeEntry {
 
 pub struct StructScopeEntry {
     type_id: TypeID,
+    borrow_type: BorrowTypeID,
     struct_template: StructTemplate,
     fields_map: BTreeMap<String, VarScopeEntry>,
     is_mut: bool,
@@ -103,6 +124,7 @@ pub struct StructScopeEntry {
 impl StructScopeEntry {
     pub fn new(
         struct_var_name: String,
+        borrow_type: BorrowTypeID,
         struct_template: StructTemplate,
         flattened_fields: Vec<(String, TypeID)>,
         is_mut: bool,
@@ -116,6 +138,7 @@ impl StructScopeEntry {
 
         StructScopeEntry {
             type_id: struct_template.get_type(),
+            borrow_type,
             struct_template,
             fields_map,
             is_mut,
@@ -130,6 +153,10 @@ impl StructScopeEntry {
         self.type_id.clone()
     }
 
+    pub fn get_borrow_type(&self) -> BorrowTypeID {
+        self.borrow_type.clone()
+    }
+
     pub fn get_field_entries(&self) -> BTreeMap<String, Rc<ScopeEntry>> {
         let mut result: BTreeMap<String, Rc<ScopeEntry>> = BTreeMap::new();
         for (field_name, var_scope_entry) in &self.fields_map {
@@ -140,6 +167,10 @@ impl StructScopeEntry {
         }
 
         result
+    }
+
+    pub fn remove_field(&mut self, field_name: String) {
+        self.fields_map.remove(&field_name);
     }
 
     pub fn as_scope_entry(self) -> ScopeEntry {
@@ -190,7 +221,12 @@ impl Scope {
         }
     }
 
-    pub fn remove_entry(&mut self, name: String) {
+    pub fn remove_entry(&mut self, mut name: String) {
+        // Remove the entire struct entry
+        if name.contains('.') {
+            name = name.split_at(name.find('.').unwrap()).0.to_string();
+        }
+
         if self.entries.contains_key(&name) {
             self.entries.remove(&name);
         } else {
@@ -319,6 +355,7 @@ impl Scope {
         entries_view
     }
 
+    // Should all be unique names since we start from current scope and work up, only adding new names (i.e. nearest name in scope is seen)
     pub fn get_all_entries(&self) -> BTreeMap<String, Rc<ScopeEntry>> {
         let mut result: BTreeMap<String, Rc<ScopeEntry>> = BTreeMap::new();
         self.get_parent_entries(&mut result);
@@ -481,6 +518,7 @@ mod test {
         // directly when obtaining the scope_entry from the flattened struct
         let struct_scope_entry = StructScopeEntry::new(
             var_name.clone(),
+            BorrowTypeID::None,
             struct_template,
             vec![(String::from(".field_1"), IntTypeID::U8.as_type())],
             false,
@@ -491,5 +529,33 @@ mod test {
         println!("{:#?}", scope);
 
         assert_eq!(2, scope.get_all_entries().len());
+    }
+
+    #[test]
+    fn filters_with_closure_correctly() {
+        let scope = Rc::new(RefCell::new(Scope::new()));
+
+        let type_id = IntTypeID::U8.as_type();
+        let var_name = String::from("a");
+
+        scope.borrow_mut().add(
+            var_name.clone(),
+            Rc::new(VarScopeEntry::new(type_id.clone(), var_name, false).as_scope_entry()),
+        );
+
+        let correct_closure = |scope_entry: &ScopeEntry| -> bool {
+            scope_entry.is_var() && scope_entry.get_type() == type_id.clone()
+        };
+
+        assert_eq!(scope.borrow().filter_with_closure(correct_closure).len(), 1);
+
+        let incorrect_closure = |scope_entry: &ScopeEntry| -> bool {
+            scope_entry.is_func() && scope_entry.get_type() == type_id.clone()
+        };
+
+        assert_eq!(
+            scope.borrow().filter_with_closure(incorrect_closure).len(),
+            0
+        );
     }
 }

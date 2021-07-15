@@ -3,15 +3,17 @@ use std::{cell::RefCell, rc::Rc};
 use rand::Rng;
 
 use crate::program::{
+    expr::bool_expr::BoolExpr,
     stmt::{
         assign_stmt::AssignStmt,
         block_stmt::BlockStmt,
+        conditional_stmt::ConditionalStmt,
         let_stmt::LetStmt,
         return_stmt::ReturnStmt,
         stmt::{Stmt, StmtVariants},
     },
     struct_template::StructTemplate,
-    types::TypeID,
+    types::{BorrowTypeID, TypeID},
     var::Var,
 };
 
@@ -22,7 +24,9 @@ use super::{
     struct_gen::{self, StructTable},
 };
 
-const MAX_STMTS_IN_BLOCK: u8 = 12;
+const MAX_STMTS_IN_BLOCK: u8 = 4;
+const MAX_CONDITIONAL_BRANCHES: u8 = 3;
+pub const MAX_STMT_DEPTH: u32 = 1; // Only refers to conditional statements
 
 pub struct StmtGenerator<'a> {
     struct_table: &'a StructTable,
@@ -37,11 +41,16 @@ impl<'a> StmtGenerator<'a> {
         }
     }
 
-    pub fn block_stmt<R: Rng>(&mut self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> BlockStmt {
+    pub fn block_stmt<R: Rng>(
+        &mut self,
+        scope: Rc<RefCell<Scope>>,
+        depth: u32,
+        rng: &mut R,
+    ) -> BlockStmt {
         let mut stmt_list: Vec<Stmt> = Vec::new();
 
         for _ in 0..MAX_STMTS_IN_BLOCK {
-            let result = self.stmt(Rc::clone(&scope), rng);
+            let result = self.stmt(Rc::clone(&scope), depth, rng);
             match result {
                 Ok(stmt) => stmt_list.push(stmt),
                 Err(msg) => println!("{}", msg),
@@ -51,13 +60,15 @@ impl<'a> StmtGenerator<'a> {
         BlockStmt::new_from_vec(stmt_list)
     }
 
+    // Don't allow returning to reference... but maybe could do with lifetimes in the future
     pub fn block_stmt_with_return<R: Rng>(
         &mut self,
         scope: Rc<RefCell<Scope>>,
+        depth: u32,
         rng: &mut R,
         return_type: TypeID,
     ) -> BlockStmt {
-        let mut block_stmt = self.block_stmt(Rc::clone(&scope), rng);
+        let mut block_stmt = self.block_stmt(Rc::clone(&scope), depth, rng);
 
         if return_type == TypeID::NullType {
             return block_stmt;
@@ -68,6 +79,7 @@ impl<'a> StmtGenerator<'a> {
             self.struct_table,
             Rc::clone(&scope),
             return_type.clone(),
+            BorrowTypeID::None,
             expr_gen::MAX_EXPR_DEPTH,
         );
         let return_expr = expr_generator.expr(rng);
@@ -78,7 +90,12 @@ impl<'a> StmtGenerator<'a> {
         block_stmt
     }
 
-    pub fn stmt<R: Rng>(&mut self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> Result<Stmt, String> {
+    pub fn stmt<R: Rng>(
+        &mut self,
+        scope: Rc<RefCell<Scope>>,
+        depth: u32,
+        rng: &mut R,
+    ) -> Result<Stmt, String> {
         let stmt_select: StmtVariants = rng.gen();
 
         match stmt_select {
@@ -89,7 +106,9 @@ impl<'a> StmtGenerator<'a> {
                     Err(s) => Err(s),
                 }
             }
-            StmtVariants::ConditionalStatement => Ok(self.let_stmt(scope, rng).as_stmt()),
+            StmtVariants::ConditionalStatement if depth > 0 => {
+                Ok(self.conditional_stmt(scope, depth, rng).as_stmt())
+            }
             StmtVariants::LetStatement | _ => Ok(self.let_stmt(scope, rng).as_stmt()),
         }
     }
@@ -97,10 +116,12 @@ impl<'a> StmtGenerator<'a> {
     pub fn let_stmt<R: Rng>(&mut self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> LetStmt {
         let rand_type_id = self.struct_table.rand_type(rng);
 
+        // TODO: Allow let statements for mutable and immutable references
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&scope),
             rand_type_id.clone(),
+            BorrowTypeID::None,
             expr_gen::MAX_EXPR_DEPTH,
         );
 
@@ -117,9 +138,11 @@ impl<'a> StmtGenerator<'a> {
 
         let scope_entry: ScopeEntry;
 
+        // Insert struct scope entry, which keeps its own flattened fields in a vec
         if let TypeID::StructType(struct_name) = rand_type_id {
             let struct_scope_entry = StructScopeEntry::new(
                 var.get_name(),
+                BorrowTypeID::None,
                 self.struct_table
                     .get_struct_template(struct_name.clone())
                     .unwrap(),
@@ -143,11 +166,13 @@ impl<'a> StmtGenerator<'a> {
         let var_choice = scope.borrow().rand_mut(rng);
 
         let type_id = var_choice.get_type();
+        let borrow_type_id = var_choice.get_borrow_type();
 
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&scope),
             type_id.clone(),
+            borrow_type_id,
             expr_gen::MAX_EXPR_DEPTH,
         );
 
@@ -163,6 +188,48 @@ impl<'a> StmtGenerator<'a> {
         }
     }
 
+    pub fn conditional_stmt<R: Rng>(
+        &mut self,
+        scope: Rc<RefCell<Scope>>,
+        depth: u32,
+        rng: &mut R,
+    ) -> ConditionalStmt {
+        let mut conditional_blocks: Vec<(BoolExpr, BlockStmt)> = Vec::new();
+
+        // TODO: Think about what could be the borrow type here
+        let expr_generator = ExprGenerator::new(
+            self.struct_table,
+            Rc::clone(&scope),
+            TypeID::BoolType,
+            BorrowTypeID::None,
+            expr_gen::MAX_EXPR_DEPTH,
+        );
+
+        loop {
+            if rng.gen_range(0.0..1.0)
+                < conditional_blocks.len() as f32 / MAX_CONDITIONAL_BRANCHES as f32
+            {
+                break;
+            }
+
+            let bool_expr = expr_generator.bool_expr(expr_gen::MAX_EXPR_DEPTH, rng);
+
+            let block_scope = Rc::new(RefCell::new(Scope::new_from_parent(Rc::clone(&scope))));
+            let block_stmt = self.block_stmt(Rc::clone(&block_scope), depth - 1, rng);
+
+            conditional_blocks.push((bool_expr, block_stmt));
+        }
+
+        let else_body = if rng.gen::<bool>() {
+            let block_scope = Rc::new(RefCell::new(Scope::new_from_parent(Rc::clone(&scope))));
+            Some(self.block_stmt(block_scope, depth - 1, rng))
+        } else {
+            None
+        };
+
+        ConditionalStmt::new_from_vec(conditional_blocks, else_body)
+    }
+
     pub fn static_struct_stmt<R: Rng>(
         &self,
         struct_template: StructTemplate,
@@ -173,6 +240,7 @@ impl<'a> StmtGenerator<'a> {
             self.struct_table,
             Rc::clone(&scope),
             struct_template.get_type(),
+            BorrowTypeID::None,
             expr_gen::MAX_EXPR_DEPTH,
         );
 

@@ -4,7 +4,7 @@ use super::{
     main_gen,
     name_gen::NameGenerator,
     scope::{Scope, ScopeEntry},
-    stmt_gen::StmtGenerator,
+    stmt_gen::{self, StmtGenerator},
     struct_gen::StructTable,
 };
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
         expr::expr::RawExpr,
         function::{Function, Param},
         stmt::expr_stmt::ExprStmt,
-        types::TypeID,
+        types::{BorrowTypeID, TypeID},
         var::Var,
     },
 };
@@ -36,12 +36,21 @@ impl<'a> FuncGenerator<'a> {
 
     fn gen_param<R: Rng>(&self, name: String, rng: &mut R) -> Param {
         let rand_type_id = self.struct_table.rand_type_with_global(rng);
+        let rand_borrow_type_id: BorrowTypeID = rng.gen();
 
-        // TODO: change this to select random ref/borrow type
-        // let rand_borrow_type: BorrowTypeID = BorrowTypeID::None;
-        // Param::new_with_borrow(name, rand_type_id, rand_borrow_type)
+        if let TypeID::StructType(s) = &rand_type_id {
+            if s.eq("StructGlobal") {
+                if rng.gen::<bool>() {
+                    return Param::new_ref(name, rand_type_id);
+                } else {
+                    return Param::new_mut_ref(name, rand_type_id);
+                }
+            }
+        }
 
-        Param::new(name, rand_type_id)
+        Param::new_with_borrow(name, rand_type_id, rand_borrow_type_id)
+
+        // Param::new(name, rand_type_id)
     }
 
     fn gen_params<R: Rng>(&self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> Vec<Param> {
@@ -95,6 +104,7 @@ impl<'a> FuncGenerator<'a> {
         // Generate block stmt with a return at the end
         let mut block_stmt = stmt_generator.block_stmt_with_return(
             Rc::clone(&function_scope),
+            stmt_gen::MAX_STMT_DEPTH,
             rng,
             return_type.clone(),
         );

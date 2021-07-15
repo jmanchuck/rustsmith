@@ -1,17 +1,20 @@
 use crate::program::types::TypeID;
 use crate::program::var::Var;
 
-use super::binary_expr::BinaryExpr;
+use super::borrow_expr::BorrowExpr;
 use super::func_call_expr::FunctionCallExpr;
 use super::int_expr::IntExpr;
 use super::struct_expr::StructExpr;
+use super::{binary_expr::BinaryExpr, bool_expr::BoolExpr};
 
 use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
 
 pub enum Expr {
     Arithmetic(ArithmeticExpr),
+    Boolean(BoolExpr),
     Literal(LiteralExpr),
     Variable(Var),
+    Borrow(Box<BorrowExpr>),
 }
 
 impl ToString for Expr {
@@ -20,6 +23,8 @@ impl ToString for Expr {
             Self::Literal(s) => s.to_string(),
             Self::Arithmetic(s) => s.to_string(),
             Self::Variable(s) => s.to_string(),
+            Self::Boolean(s) => s.to_string(),
+            Self::Borrow(s) => (*s).to_string(),
         }
     }
 }

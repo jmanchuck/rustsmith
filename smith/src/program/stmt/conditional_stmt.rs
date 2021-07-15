@@ -1,28 +1,36 @@
 use crate::program::expr::bool_expr::BoolExpr;
 
-use super::{block_stmt::BlockStmt, conditional_block_stmt::ConditionalType, stmt::Stmt};
+use super::{block_stmt::BlockStmt, stmt::Stmt};
 
 pub struct ConditionalStmt {
-    condition: BoolExpr,
-    block_stmt: BlockStmt,
-    conditional_type: ConditionalType,
+    conditional_blocks: Vec<(BoolExpr, BlockStmt)>,
+    else_body: Option<BlockStmt>,
 }
 
 impl ConditionalStmt {
-    pub fn new(
-        condition: BoolExpr,
-        block_stmt: BlockStmt,
-        conditional_type: ConditionalType,
-    ) -> Self {
+    pub fn new() -> Self {
         ConditionalStmt {
-            condition,
-            block_stmt,
-            conditional_type,
+            conditional_blocks: Vec::new(),
+            else_body: None,
         }
     }
 
-    pub fn get_conditional_type(&self) -> ConditionalType {
-        self.conditional_type.clone()
+    pub fn new_from_vec(
+        conditional_blocks: Vec<(BoolExpr, BlockStmt)>,
+        else_body: Option<BlockStmt>,
+    ) -> Self {
+        ConditionalStmt {
+            conditional_blocks,
+            else_body,
+        }
+    }
+
+    pub fn insert_conditional(&mut self, expr: BoolExpr, block_stmt: BlockStmt) {
+        self.conditional_blocks.push((expr, block_stmt));
+    }
+
+    pub fn insert_else_body(&mut self, block_stmt: BlockStmt) {
+        self.else_body = Some(block_stmt);
     }
 
     pub fn as_stmt(self) -> Stmt {
@@ -32,25 +40,26 @@ impl ConditionalStmt {
 
 impl ToString for ConditionalStmt {
     fn to_string(&self) -> String {
-        match self.conditional_type {
-            ConditionalType::Else => {
-                format!("else {}", self.block_stmt.to_string())
-            }
+        let mut result = String::new();
 
-            _ => {
-                let mut string = String::new();
-                string.push_str(
-                    format!(
-                        "{} {} {}\n",
-                        self.conditional_type.to_string(),
-                        self.condition.to_string(),
-                        self.block_stmt.to_string()
-                    )
-                    .as_str(),
-                );
-                string
-            }
+        for i in 0..self.conditional_blocks.len() {
+            let conditional = if i == 0 { "if" } else { "else if" };
+
+            result.push_str(
+                format!(
+                    "{} ({}) {}\n",
+                    conditional,
+                    self.conditional_blocks[i].0.to_string(),
+                    self.conditional_blocks[i].1.to_string()
+                )
+                .as_str(),
+            );
         }
+
+        if let Some(else_block) = &self.else_body {
+            result.push_str(format!("else {}\n", else_block.to_string()).as_str());
+        }
+        result
     }
 }
 
@@ -66,7 +75,29 @@ mod test {
     use super::*;
     #[test]
     fn correct_structure() {
-        let bool_expr = BoolExpr::Bool(BoolValue::new(true));
+        let bool_expr_1 = BoolExpr::Bool(BoolValue::new(true));
+        let bool_expr_2 = BoolExpr::Bool(BoolValue::new(false));
+
+        let block_statements = vec![block_stmt(), block_stmt()];
+        let conditions = vec![bool_expr_1, bool_expr_2];
+
+        let conditional_blocks: Vec<(BoolExpr, BlockStmt)> = conditions
+            .into_iter()
+            .zip(block_statements.into_iter())
+            .collect();
+
+        let if_stmt = ConditionalStmt::new_from_vec(conditional_blocks, Some(block_stmt()));
+
+        let string_rep = if_stmt.to_string();
+
+        println!("{}", string_rep);
+
+        assert!(string_rep.starts_with("if"));
+        assert!(string_rep.contains("else if"));
+        assert!(string_rep.contains("else"));
+    }
+
+    fn block_stmt() -> BlockStmt {
         let mut block_stmt = BlockStmt::new();
 
         let expr = IntExpr::new_u8(5).as_expr();
@@ -75,12 +106,6 @@ mod test {
 
         block_stmt.push(let_stmt.as_stmt());
 
-        let if_stmt = ConditionalStmt::new(bool_expr, block_stmt, ConditionalType::If);
-
-        let string_rep = if_stmt.to_string();
-
-        println!("{}", string_rep);
-
-        assert!(string_rep.starts_with("if"));
+        block_stmt
     }
 }

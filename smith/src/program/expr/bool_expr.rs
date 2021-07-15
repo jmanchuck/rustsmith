@@ -1,10 +1,29 @@
-use super::expr::ArithmeticExpr;
+use crate::program::var::Var;
 
+use super::{
+    expr::{ArithmeticExpr, Expr},
+    func_call_expr::FunctionCallExpr,
+};
+
+use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
+
+#[derive(EnumDiscriminants)]
+#[strum_discriminants(vis(pub))]
+#[strum_discriminants(name(BoolExprVariants))]
+#[strum_discriminants(derive(EnumCount, EnumIter))]
 pub enum BoolExpr {
     Bool(BoolValue),
     Binary(Box<BinBoolExpr>),
     Comparison(Box<ComparisonExpr>),
     Negation(Box<NegationExpr>),
+    Var(Var),
+    Func(FunctionCallExpr),
+}
+
+impl BoolExpr {
+    pub fn as_expr(self) -> Expr {
+        Expr::Boolean(self)
+    }
 }
 
 impl ToString for BoolExpr {
@@ -14,6 +33,8 @@ impl ToString for BoolExpr {
             Self::Binary(s) => (*s).to_string(),
             Self::Comparison(s) => (*s).to_string(),
             Self::Negation(s) => (*s).to_string(),
+            Self::Var(s) => s.to_string(),
+            Self::Func(s) => s.to_string(),
         }
     }
 }
@@ -25,6 +46,10 @@ pub struct BoolValue {
 impl BoolValue {
     pub fn new(value: bool) -> Self {
         BoolValue { value }
+    }
+
+    pub fn as_bool_expr(self) -> BoolExpr {
+        BoolExpr::Bool(self)
     }
 }
 
@@ -44,10 +69,20 @@ pub struct BinBoolExpr {
     op: BoolOp,
 }
 
+impl BinBoolExpr {
+    pub fn new(left: BoolExpr, right: BoolExpr, op: BoolOp) -> Self {
+        BinBoolExpr { left, right, op }
+    }
+
+    pub fn as_bool_expr(self) -> BoolExpr {
+        BoolExpr::Binary(Box::new(self))
+    }
+}
+
 impl ToString for BinBoolExpr {
     fn to_string(&self) -> String {
         format!(
-            "{} {} {}",
+            "({} {} {})",
             self.left.to_string(),
             self.op.to_string(),
             self.right.to_string()
@@ -61,10 +96,20 @@ pub struct ComparisonExpr {
     op: ComparisonOp,
 }
 
+impl ComparisonExpr {
+    pub fn new(left: ArithmeticExpr, right: ArithmeticExpr, op: ComparisonOp) -> Self {
+        ComparisonExpr { left, right, op }
+    }
+
+    pub fn as_bool_expr(self) -> BoolExpr {
+        BoolExpr::Comparison(Box::new(self))
+    }
+}
+
 impl ToString for ComparisonExpr {
     fn to_string(&self) -> String {
         format!(
-            "{} {} {}",
+            "({} {} {})",
             self.left.to_string(),
             self.op.to_string(),
             self.right.to_string()
@@ -76,9 +121,19 @@ pub struct NegationExpr {
     expr: BoolExpr,
 }
 
+impl NegationExpr {
+    pub fn new(expr: BoolExpr) -> Self {
+        NegationExpr { expr }
+    }
+
+    pub fn as_bool_expr(self) -> BoolExpr {
+        BoolExpr::Negation(Box::new(self))
+    }
+}
+
 impl ToString for NegationExpr {
     fn to_string(&self) -> String {
-        format!("!{}", self.expr.to_string())
+        format!("!({})", self.expr.to_string())
     }
 }
 

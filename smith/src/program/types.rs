@@ -24,6 +24,7 @@ impl ToString for BorrowTypeID {
 pub enum TypeID {
     IntType(IntTypeID),
     StructType(String), // String to denote the struct name
+    BoolType,
     NullType,
 }
 
@@ -32,6 +33,7 @@ impl TypeID {
         match self {
             Self::IntType(int_type_id) => int_type_id.to_string(),
             Self::StructType(string) => string.clone(),
+            &Self::BoolType => String::from("bool"),
             Self::NullType => String::from(""),
         }
     }

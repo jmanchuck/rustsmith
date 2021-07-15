@@ -1,4 +1,5 @@
 use super::{
+    expr::expr::Expr,
     function::Param,
     types::{BorrowTypeID, TypeID},
 };
@@ -60,6 +61,10 @@ impl Var {
             name: param.get_name(),
             is_mut: false,
         }
+    }
+
+    pub fn as_expr(self) -> Expr {
+        Expr::Variable(self)
     }
 
     pub fn is_mut(&self) -> bool {

@@ -26,15 +26,10 @@ impl BinaryExpr {
         // The annotation is only required when a literal is provided as argument
         // The checked arithmetic operations require type annotations in the argument
         format!(
-            "{}.{}({}{})",
+            "{}.{}({})",
             self.left.to_string(),
             self.op.to_string_safe(),
             self.right.to_string(),
-            if let ArithmeticExpr::Int(int_expr) = &self.right {
-                int_expr.get_type().to_string()
-            } else {
-                String::new()
-            }
         )
     }
 }
