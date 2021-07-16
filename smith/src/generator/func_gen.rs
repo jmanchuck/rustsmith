@@ -39,7 +39,7 @@ impl<'a> FuncGenerator<'a> {
         let rand_borrow_type_id: BorrowTypeID = rng.gen();
 
         if let TypeID::StructType(s) = &rand_type_id {
-            if s.eq("StructGlobal") {
+            if s.eq(struct_gen::GLOBAL_STRUCT_NAME) {
                 if rng.gen::<bool>() {
                     return Param::new_ref(name, rand_type_id);
                 } else {
@@ -49,11 +49,12 @@ impl<'a> FuncGenerator<'a> {
         }
 
         Param::new_with_borrow(name, rand_type_id, rand_borrow_type_id)
-
-        // Param::new(name, rand_type_id)
     }
 
+    // TODO: Allow it to take global struct once and only once
     fn gen_params<R: Rng>(&self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> Vec<Param> {
+        let mut has_global_struct = false;
+
         let mut param_name_gen = NameGenerator::new(String::from("param_"));
         let mut param_list: Vec<Param> = Vec::new();
 
@@ -63,7 +64,20 @@ impl<'a> FuncGenerator<'a> {
                 break;
             }
 
-            let param = self.gen_param(param_name_gen.next().unwrap(), rng);
+            let param_name = param_name_gen.next().unwrap();
+            let mut param = self.gen_param(param_name.clone(), rng);
+
+            while has_global_struct
+                && param.get_type() == TypeID::StructType(struct_gen::GLOBAL_STRUCT_NAME.to_owned())
+            {
+                param = self.gen_param(param_name.clone(), rng);
+                println!("Regenerating param since attempting to take another global struct");
+            }
+
+            if param.get_type() == TypeID::StructType(struct_gen::GLOBAL_STRUCT_NAME.to_owned()) {
+                has_global_struct = true;
+            }
+
             let var = Var::from_param(&param);
             param_list.push(param.clone());
 

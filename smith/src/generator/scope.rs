@@ -42,13 +42,6 @@ impl ScopeEntry {
         self.get_borrow_type() == borrow_type_id
     }
 
-    pub fn is_mut_var(&self) -> bool {
-        match self {
-            Self::Var(var) => var.is_mut(),
-            _ => false,
-        }
-    }
-
     pub fn is_mut(&self) -> bool {
         match self {
             Self::Var(var) => var.is_mut(),
@@ -241,23 +234,10 @@ impl Scope {
         self.entries.len()
     }
 
-    pub fn len_all(&self) -> usize {
-        match &self.parent {
-            Some(parent) => self.len() + parent.borrow().len(),
-            None => self.len(),
-        }
-    }
-
     pub fn filter_by_type(&self, type_id: TypeID) -> Vec<(String, Rc<ScopeEntry>)> {
-        let mut result: Vec<(String, Rc<ScopeEntry>)> = Vec::new();
+        let filter = |scope_entry: &ScopeEntry| -> bool { scope_entry.is_type(type_id.clone()) };
 
-        for (name, entry) in self.get_all_entries().iter() {
-            if entry.is_type(type_id.clone()) {
-                result.push((name.clone(), Rc::clone(entry)));
-            }
-        }
-
-        result
+        self.filter_with_closure(filter)
     }
 
     pub fn filter_with_closure<T>(&self, filter: T) -> Vec<(String, Rc<ScopeEntry>)>
@@ -265,15 +245,25 @@ impl Scope {
         T: Fn(&ScopeEntry) -> bool,
     {
         let mut result: Vec<(String, Rc<ScopeEntry>)> = Vec::new();
-        let entries = self.get_all_entries();
-
-        for (entry_name, entry) in entries {
+        for (entry_name, entry) in self.get_all_entries() {
             if filter(entry.as_ref()) {
                 result.push((entry_name, Rc::clone(&entry)));
             }
         }
 
         result
+    }
+
+    pub fn contains_filter<T>(&self, filter: T) -> bool
+    where
+        T: Fn(&ScopeEntry) -> bool,
+    {
+        for (_, entry) in self.get_all_entries() {
+            if filter(entry.as_ref()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Quicker than getting all entries since we check the scope stack from top to bottom
@@ -307,70 +297,73 @@ impl Scope {
         return false;
     }
 
-    pub fn rand_mut<R: Rng>(&self, rng: &mut R) -> Rc<ScopeEntry> {
-        let mut_var_list: Vec<Rc<ScopeEntry>> = self
-            .get_all_entries()
-            .values()
-            .filter(|x| x.is_mut_var())
-            .map(|x| Rc::clone(&x))
-            .collect();
+    pub fn rand_mut<R: Rng>(&self, rng: &mut R) -> (String, Rc<ScopeEntry>) {
+        let filter = |scope_entry: &ScopeEntry| -> bool { scope_entry.is_mut() };
+        let mutables = self.filter_with_closure(filter);
 
-        Rc::clone(mut_var_list.choose(rng).unwrap())
+        mutables.choose(rng).unwrap().clone()
     }
 
     pub fn mut_count(&self) -> usize {
-        // Filters on condition that entry is a variable and is mutable then counts it
-        let local_count = self
-            .entries
+        self.get_all_entries()
             .iter()
-            .filter(|entry| -> bool {
-                if let ScopeEntry::Var(e) = entry.1.as_ref() {
-                    e.is_mut()
-                } else {
-                    false
-                }
-            })
-            .count();
+            .filter(|(_, x)| x.is_mut())
+            .count()
 
-        // Count parent if parent is available
-        let parent_count = if let Some(parent_scope) = &self.parent {
-            parent_scope.borrow().mut_count()
-        } else {
-            0
-        };
+        // // Filters on condition that entry is a variable and is mutable then counts it
+        // let local_count = self
+        //     .entries
+        //     .iter()
+        //     .filter(|entry| -> bool {
+        //         if let ScopeEntry::Var(e) = entry.1.as_ref() {
+        //             e.is_mut()
+        //         } else {
+        //             false
+        //         }
+        //     })
+        //     .count();
 
-        local_count + parent_count
+        // // Count parent if parent is available
+        // let parent_count = if let Some(parent_scope) = &self.parent {
+        //     parent_scope.borrow().mut_count()
+        // } else {
+        //     0
+        // };
+
+        // local_count + parent_count
     }
 
+    // Includes a struct's flattened fields
     pub fn get_entries(&self) -> BTreeMap<String, Rc<ScopeEntry>> {
-        let mut entries_view: BTreeMap<String, Rc<ScopeEntry>> = BTreeMap::new();
-        for (entry_name, scope_entry) in self.entries.iter() {
-            entries_view.insert(entry_name.clone(), Rc::clone(scope_entry));
-            if let ScopeEntry::Struct(struct_scope_entry) = scope_entry.as_ref() {
-                for (entry_name, scope_entry) in struct_scope_entry.get_field_entries() {
-                    entries_view.insert(entry_name.clone(), Rc::clone(&scope_entry));
-                }
-            }
-        }
-        entries_view
+        self.entries.clone()
     }
 
     // Should all be unique names since we start from current scope and work up, only adding new names (i.e. nearest name in scope is seen)
     pub fn get_all_entries(&self) -> BTreeMap<String, Rc<ScopeEntry>> {
         let mut result: BTreeMap<String, Rc<ScopeEntry>> = BTreeMap::new();
-        self.get_parent_entries(&mut result);
+        self.get_entries_r(&mut result);
 
         result
     }
 
-    fn get_parent_entries(&self, result: &mut BTreeMap<String, Rc<ScopeEntry>>) {
+    // Recursively gets entries
+    fn get_entries_r(&self, result: &mut BTreeMap<String, Rc<ScopeEntry>>) {
         for (entry_name, scope_entry) in self.get_entries() {
+            // If variable name is not in scope
             if !result.contains_key(&entry_name) {
                 result.insert(entry_name.clone(), Rc::clone(&scope_entry));
+
+                // Flattening done here to avoid name overlap
+                // i.e. let a = struct -> let a = i32 -> a.field is no longer valid
+                if let ScopeEntry::Struct(struct_scope_entry) = scope_entry.as_ref() {
+                    for (entry_name, scope_entry) in struct_scope_entry.get_field_entries() {
+                        result.insert(entry_name.clone(), Rc::clone(&scope_entry));
+                    }
+                }
             }
         }
         match &self.parent {
-            Some(parent_scope) => parent_scope.borrow().get_parent_entries(result),
+            Some(parent_scope) => parent_scope.borrow().get_entries_r(result),
             None => (),
         }
     }

@@ -1,6 +1,6 @@
-use crate::program::expr::binary_expr::BinaryOp;
+use crate::program::expr::arithmetic_expr::BinaryOp;
+use crate::program::expr::arithmetic_expr::IntValue;
 use crate::program::expr::bool_expr::{BoolOp, ComparisonOp};
-use crate::program::expr::int_expr::IntValue;
 use crate::program::types::{BorrowTypeID, IntTypeID, TypeIDVariants};
 
 use rand::prelude::SliceRandom;

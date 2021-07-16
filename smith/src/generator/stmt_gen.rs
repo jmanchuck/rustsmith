@@ -24,9 +24,9 @@ use super::{
     struct_gen::{self, StructTable},
 };
 
-const MAX_STMTS_IN_BLOCK: u8 = 4;
-const MAX_CONDITIONAL_BRANCHES: u8 = 3;
-pub const MAX_STMT_DEPTH: u32 = 1; // Only refers to conditional statements
+const MAX_STMTS_IN_BLOCK: u8 = 8;
+const MAX_CONDITIONAL_BRANCHES: u8 = 5;
+pub const MAX_STMT_DEPTH: u32 = 2; // Only refers to conditional statements
 
 pub struct StmtGenerator<'a> {
     struct_table: &'a StructTable,
@@ -158,15 +158,24 @@ impl<'a> StmtGenerator<'a> {
         LetStmt::new(var, expr)
     }
 
+    // TODO: Refactor away from conservative borrow on mutable assignment to field
+    // Currently removes entire struct from scope instead of hiding it
     pub fn assign_stmt<R: Rng>(
         &mut self,
         scope: Rc<RefCell<Scope>>,
         rng: &mut R,
     ) -> Result<AssignStmt, String> {
+        // TODO: If this LHS is a field of a struct, then the entire struct should be considered borrowed
+        // Had the issue of: let mut a = struct -> a.field = function(a, other_args), a cannot be function arg
         let var_choice = scope.borrow().rand_mut(rng);
+        let scope_entry = var_choice.1;
 
-        let type_id = var_choice.get_type();
-        let borrow_type_id = var_choice.get_borrow_type();
+        if scope_entry.is_struct() || var_choice.0.contains('.') {
+            scope.borrow_mut().remove_entry(var_choice.0.clone());
+        }
+
+        let type_id = scope_entry.get_type();
+        let borrow_type_id = scope_entry.get_borrow_type();
 
         let expr_generator = ExprGenerator::new(
             self.struct_table,
@@ -178,12 +187,12 @@ impl<'a> StmtGenerator<'a> {
 
         let expr = expr_generator.expr(rng);
 
-        if let ScopeEntry::Var(var) = var_choice.as_ref() {
+        if let ScopeEntry::Var(var) = scope_entry.as_ref() {
             Ok(AssignStmt::new(var.clone(), expr))
         } else {
             Err(format!(
                 "Var choice is not type var, found {}",
-                var_choice.get_type().to_string()
+                scope_entry.get_type().to_string()
             ))
         }
     }

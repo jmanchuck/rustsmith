@@ -4,8 +4,8 @@ use rand::{
 };
 use strum::{EnumCount, IntoEnumIterator};
 
+use crate::program::expr::arithmetic_expr::ArithmeticExprVariants;
 use crate::program::expr::bool_expr::BoolExprVariants;
-use crate::program::expr::expr::ArithmeticExprVariants;
 use crate::program::expr::struct_expr::StructExprVariants;
 
 // We can modify this const into a static singleton struct and allow sample func to access atomically

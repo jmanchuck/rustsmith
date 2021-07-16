@@ -2,15 +2,16 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::program::{
     expr::{
-        binary_expr::{BinaryExpr, BinaryOp},
+        arithmetic_expr::{
+            ArithmeticExpr, ArithmeticExprVariants, BinaryExpr, BinaryOp, IntExpr, IntValue,
+        },
         bool_expr::{
             BinBoolExpr, BoolExpr, BoolExprVariants, BoolOp, BoolValue, ComparisonExpr,
             ComparisonOp, NegationExpr,
         },
         borrow_expr::BorrowExpr,
-        expr::{ArithmeticExpr, ArithmeticExprVariants, Expr},
+        expr::Expr,
         func_call_expr::FunctionCallExpr,
-        int_expr::{IntExpr, IntValue},
         struct_expr::{StructExpr, StructExprVariants, StructLiteral},
     },
     struct_template::StructTemplate,
@@ -117,13 +118,11 @@ impl<'a> ExprGenerator<'a> {
                 if self
                     .scope
                     .borrow()
-                    .filter_with_closure(|scope_entry: &ScopeEntry| -> bool {
+                    .contains_filter(|scope_entry: &ScopeEntry| -> bool {
                         scope_entry.is_struct()
                             && self.type_id == scope_entry.get_type()
                             && self.borrow_type_id == scope_entry.get_borrow_type()
-                    })
-                    .len()
-                    > 0 =>
+                    }) =>
             {
                 let var = self.var(rng);
 
@@ -180,13 +179,11 @@ impl<'a> ExprGenerator<'a> {
                 if self
                     .scope
                     .borrow()
-                    .filter_with_closure(|scope_entry: &ScopeEntry| -> bool {
+                    .contains_filter(|scope_entry: &ScopeEntry| -> bool {
                         scope_entry.is_var()
                             && scope_entry.get_type() == self.type_id
                             && scope_entry.get_borrow_type() == self.borrow_type_id
-                    })
-                    .len()
-                    > 0 =>
+                    }) =>
             {
                 ArithmeticExpr::Var(self.var(rng))
             }
@@ -257,13 +254,11 @@ impl<'a> ExprGenerator<'a> {
                 if self
                     .scope
                     .borrow()
-                    .filter_with_closure(|scope_entry: &ScopeEntry| -> bool {
+                    .contains_filter(|scope_entry: &ScopeEntry| -> bool {
                         scope_entry.is_var()
                             && scope_entry.get_type() == self.type_id
                             && scope_entry.get_borrow_type() == self.borrow_type_id
-                    })
-                    .len()
-                    > 0 =>
+                    }) =>
             {
                 BoolExpr::Var(self.var(rng))
             }
@@ -304,6 +299,18 @@ impl<'a> ExprGenerator<'a> {
         NegationExpr::new(bool_expr)
     }
 
+    fn var<R: Rng>(&self, rng: &mut R) -> Var {
+        let var_list = self.scope.borrow().filter_with_closure(|scope_entry| {
+            (scope_entry.is_var() || scope_entry.is_struct())
+                && scope_entry.is_type(self.type_id.clone())
+                && scope_entry.is_borrow_type(self.borrow_type_id.clone())
+        });
+
+        let var_choice = var_list.choose(rng);
+
+        Var::new(self.type_id.clone(), var_choice.unwrap().0.clone(), false)
+    }
+
     // Assumes that the function with the correct type already exists
     fn func_call_expr<R: Rng>(&self, rng: &mut R) -> Result<FunctionCallExpr, String> {
         let func_list: Vec<(String, Rc<ScopeEntry>)> =
@@ -311,9 +318,9 @@ impl<'a> ExprGenerator<'a> {
                 scope_entry.is_func() && scope_entry.is_type(self.type_id.clone())
             });
 
-        let entry_choice = func_list.choose(rng).unwrap();
+        let (_entry_name, entry_choice) = func_list.choose(rng).unwrap();
 
-        if let ScopeEntry::Func(func_scope_entry) = entry_choice.1.as_ref() {
+        if let ScopeEntry::Func(func_scope_entry) = entry_choice.as_ref() {
             let function_template = func_scope_entry.get_template();
             let mut arguments: Vec<Expr> = Vec::new();
 
@@ -358,6 +365,7 @@ impl<'a> ExprGenerator<'a> {
         }
     }
 
+    // TODO: Force mutable borrow on global struct? Prevent instantiation
     fn borrow_expr<R: Rng>(&self, rng: &mut R) -> Result<BorrowExpr, ()> {
         match self.borrow_type_id {
             BorrowTypeID::Ref => self.immut_borrow_expr(rng),
@@ -375,8 +383,8 @@ impl<'a> ExprGenerator<'a> {
         let choice = entries.choose(rng);
 
         match choice {
-            Some(entry) => {
-                let var = Var::new(self.type_id.clone(), entry.0.clone(), false);
+            Some((entry_name, scope_entry)) => {
+                let var = Var::new(self.type_id.clone(), entry_name.clone(), false);
 
                 self.scope.borrow_mut().remove_entry(var.get_name());
 
@@ -384,7 +392,7 @@ impl<'a> ExprGenerator<'a> {
                 Ok(BorrowExpr::new(
                     BorrowTypeID::MutRef,
                     var.as_expr(),
-                    entry.1.get_borrow_type() != BorrowTypeID::MutRef,
+                    scope_entry.get_borrow_type() != BorrowTypeID::MutRef,
                 ))
             }
             None => Err(()),
@@ -413,39 +421,6 @@ impl<'a> ExprGenerator<'a> {
             }
             None => Err(()),
         }
-    }
-
-    fn var<R: Rng>(&self, rng: &mut R) -> Var {
-        let var_list = self.scope.borrow().filter_with_closure(|scope_entry| {
-            (scope_entry.is_var() || scope_entry.is_struct())
-                && scope_entry.is_type(self.type_id.clone())
-                && scope_entry.is_borrow_type(self.borrow_type_id.clone())
-        });
-
-        let var_choice = var_list.choose(rng);
-
-        Var::new(self.type_id.clone(), var_choice.unwrap().0.clone(), false)
-    }
-
-    fn var_mut<R: Rng>(&self, rng: &mut R) -> Var {
-        let var_type_mut_filter = |scope_entry: &ScopeEntry| match scope_entry {
-            ScopeEntry::Var(var_scope_entry) => {
-                var_scope_entry.get_borrow_type() == BorrowTypeID::MutRef
-                    && scope_entry.get_type() == self.type_id
-            }
-            ScopeEntry::Struct(struct_scope_entry) => {
-                struct_scope_entry.get_borrow_type() == BorrowTypeID::MutRef
-                    && scope_entry.get_type() == self.type_id
-            }
-            _ => false,
-        };
-
-        let var_list: Vec<(String, Rc<ScopeEntry>)> =
-            self.scope.borrow().filter_with_closure(var_type_mut_filter);
-
-        let var_choice = var_list.choose(rng).unwrap();
-
-        Var::new(self.type_id.clone(), var_choice.0.clone(), false)
     }
 
     pub fn int32<R: Rng>(rng: &mut R) -> IntExpr {
