@@ -2,6 +2,8 @@ use crate::program::expr::bool_expr::BoolExpr;
 
 use super::{block_stmt::BlockStmt, stmt::Stmt};
 
+// Contains the branches of conditions and block statements corresponding to if, else if...
+// Optional else branch
 pub struct ConditionalStmt {
     conditional_blocks: Vec<(BoolExpr, BlockStmt)>,
     else_body: Option<BlockStmt>,
@@ -66,7 +68,7 @@ impl ToString for ConditionalStmt {
 #[cfg(test)]
 mod test {
     use crate::program::{
-        expr::{bool_expr::BoolValue, int_expr::IntExpr},
+        expr::{arithmetic_expr::IntExpr, bool_expr::BoolValue},
         stmt::let_stmt::LetStmt,
         types::IntTypeID,
         var::Var,

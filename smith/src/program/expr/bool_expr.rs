@@ -1,9 +1,7 @@
 use crate::program::var::Var;
 
-use super::{
-    expr::{ArithmeticExpr, Expr},
-    func_call_expr::FunctionCallExpr,
-};
+use super::arithmetic_expr::ArithmeticExpr;
+use super::{expr::Expr, func_call_expr::FunctionCallExpr};
 
 use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
 

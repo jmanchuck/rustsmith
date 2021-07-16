@@ -1,5 +1,5 @@
 use super::{function::Function, stmt::static_stmt::StaticStmt, struct_template::StructTemplate};
-
+// Top level AST node representing an entire program
 pub struct Program {
     statics: StaticList,
     functions: FunctionList,

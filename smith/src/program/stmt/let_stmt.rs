@@ -42,7 +42,7 @@ impl LetStmt {
 #[cfg(test)]
 mod test {
     use crate::program::{
-        expr::{expr::ArithmeticExpr, int_expr::IntExpr},
+        expr::arithmetic_expr::{ArithmeticExpr, IntExpr},
         types::{IntTypeID, TypeID},
     };
 

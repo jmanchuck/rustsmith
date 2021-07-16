@@ -3,7 +3,10 @@ use super::{
     function::Param,
     types::{BorrowTypeID, TypeID},
 };
-
+// Variable representation - just it's name
+// Acts as both LHS and RHS in assignment/let statement
+// Can be part of an expression or an expression itself
+// Used for variable scope entry
 #[derive(Clone, Debug)]
 pub struct Var {
     type_id: TypeID,

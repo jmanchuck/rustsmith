@@ -46,14 +46,3 @@ impl BlockStmt {
         string
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    #[test]
-    fn correct_structure() {
-        let block = BlockStmt::new();
-        assert!(block.to_string().starts_with("{"));
-        assert!(block.to_string().ends_with("}"));
-    }
-}

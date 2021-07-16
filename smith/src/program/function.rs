@@ -3,7 +3,7 @@ use std::fmt;
 use super::types::{BorrowTypeID, TypeID};
 use crate::program::stmt::block_stmt::BlockStmt;
 
-// Contains enough information to generate and invoke a function call
+// Contains required information to generate and invoke a function call
 #[derive(Clone)]
 pub struct FunctionTemplate {
     name: String,
@@ -174,8 +174,8 @@ mod test {
     use crate::program::var::Var;
     use crate::program::{
         expr::{
-            expr::{ArithmeticExpr, Expr},
-            int_expr::IntExpr,
+            arithmetic_expr::{ArithmeticExpr, IntExpr},
+            expr::Expr,
         },
         stmt::stmt::Stmt,
     };

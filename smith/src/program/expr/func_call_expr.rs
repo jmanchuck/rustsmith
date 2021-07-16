@@ -25,8 +25,6 @@ impl ToString for FunctionCallExpr {
         let mut result: Vec<String> = Vec::new();
         let func_name = self.function_template.get_name();
 
-        // let params: Vec<&Param> = self.function_template.params_iter().collect();
-
         for i in 0..self.arguments.len() {
             let arg_string = format!(
                 "{}",
@@ -42,7 +40,7 @@ impl ToString for FunctionCallExpr {
 
 #[cfg(test)]
 mod test {
-    use crate::program::{expr::int_expr::IntExpr, function::Param, types::IntTypeID};
+    use crate::program::{expr::arithmetic_expr::IntExpr, function::Param, types::IntTypeID};
 
     use super::*;
     #[test]
