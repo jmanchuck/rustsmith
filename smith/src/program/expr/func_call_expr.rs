@@ -54,6 +54,6 @@ mod test {
         let arg = IntExpr::new_i32(20).as_expr();
         let call_expr = FunctionCallExpr::new(function_template, vec![arg]);
 
-        assert_eq!(call_expr.to_string(), "test_function(20)");
+        assert_eq!(call_expr.to_string(), "test_function(20i32)");
     }
 }

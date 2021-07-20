@@ -10,17 +10,19 @@ do
     cd $dir 
     echo "Running binaries from $dir"
     echo "\"$(basename $dir)\": {" >> ../output.json
-    for file in ./*;
+    for file in ./release/*;
     do 
-        # echo "Checking $file"
         if [[ -f $file && -x $file ]]; then
-            # echo "Running $file"
             output=$(./$file)
-            echo "\"$(basename $file)\": $output," >> ../output.json
+            echo "\"$(basename $file)\": $output" >> ../output.json
+            echo "," >> ../output.json
         fi
     done
-    echo "}," >> ../output.json
+    sed -i '' -e '$ d' ../output.json
+    echo "}" >> ../output.json
+    echo "," >> ../output.json
     cd ..
 done
+sed -i '' -e '$ d' ../output.json
 
 echo "}" >> output.json

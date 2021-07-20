@@ -3,17 +3,18 @@ use std::{cell::RefCell, rc::Rc};
 use rand::Rng;
 
 use crate::program::{
-    expr::bool_expr::BoolExpr,
+    expr::{bool_expr::BoolExpr, expr::RawExpr},
     stmt::{
         assign_stmt::AssignStmt,
         block_stmt::BlockStmt,
         conditional_stmt::ConditionalStmt,
+        expr_stmt::ExprStmt,
         let_stmt::LetStmt,
         return_stmt::ReturnStmt,
         stmt::{Stmt, StmtVariants},
     },
     struct_template::StructTemplate,
-    types::{BorrowTypeID, TypeID},
+    types::{BorrowStatus, BorrowTypeID, TypeID},
     var::Var,
 };
 
@@ -24,9 +25,9 @@ use super::{
     struct_gen::{self, StructTable},
 };
 
-const MAX_STMTS_IN_BLOCK: u8 = 8;
-const MAX_CONDITIONAL_BRANCHES: u8 = 5;
-pub const MAX_STMT_DEPTH: u32 = 2; // Only refers to conditional statements
+const MAX_STMTS_IN_BLOCK: u8 = 10;
+const MAX_CONDITIONAL_BRANCHES: u8 = 1;
+pub const MAX_STMT_DEPTH: u32 = 1; // Only refers to conditional statements
 
 pub struct StmtGenerator<'a> {
     struct_table: &'a StructTable,
@@ -53,14 +54,45 @@ impl<'a> StmtGenerator<'a> {
             let result = self.stmt(Rc::clone(&scope), depth, rng);
             match result {
                 Ok(stmt) => stmt_list.push(stmt),
-                Err(msg) => println!("{}", msg),
+                Err(_msg) => (),
             }
         }
 
         BlockStmt::new_from_vec(stmt_list)
     }
 
-    // Don't allow returning to reference... but maybe could do with lifetimes in the future
+    pub fn block_stmt_main<R: Rng>(
+        &mut self,
+        scope: Rc<RefCell<Scope>>,
+        struct_template: StructTemplate,
+        depth: u32,
+        rng: &mut R,
+    ) -> BlockStmt {
+        let mut stmt_list: Vec<Stmt> = Vec::new();
+
+        stmt_list.push(self.global_struct_stmt(struct_template, Rc::clone(&scope), rng));
+
+        for _ in 1..MAX_STMTS_IN_BLOCK - 1 {
+            let result = self.stmt(Rc::clone(&scope), depth, rng);
+            match result {
+                Ok(stmt) => stmt_list.push(stmt),
+                Err(_msg) => (),
+            }
+        }
+
+        let print_serialized = RawExpr::new(format!(
+            "println!(\"{{}}\", (serde_json::to_string(&{}).unwrap()))",
+            struct_gen::GLOBAL_STRUCT_VAR_NAME
+        ))
+        .as_expr();
+
+        let print_stmt = ExprStmt::new(print_serialized).as_stmt();
+
+        stmt_list.push(print_stmt);
+
+        BlockStmt::new_from_vec(stmt_list)
+    }
+
     pub fn block_stmt_with_return<R: Rng>(
         &mut self,
         scope: Rc<RefCell<Scope>>,
@@ -168,11 +200,11 @@ impl<'a> StmtGenerator<'a> {
         // TODO: If this LHS is a field of a struct, then the entire struct should be considered borrowed
         // Had the issue of: let mut a = struct -> a.field = function(a, other_args), a cannot be function arg
         let var_choice = scope.borrow().rand_mut(rng);
-        let scope_entry = var_choice.1;
+        let (var_name, scope_entry, prev_borrow_status) = var_choice;
 
-        if scope_entry.is_struct() || var_choice.0.contains('.') {
-            scope.borrow_mut().remove_entry(var_choice.0.clone());
-        }
+        scope
+            .borrow_mut()
+            .set_borrow_status(var_name.clone(), BorrowStatus::MutBorrowed);
 
         let type_id = scope_entry.get_type();
         let borrow_type_id = scope_entry.get_borrow_type();
@@ -186,6 +218,11 @@ impl<'a> StmtGenerator<'a> {
         );
 
         let expr = expr_generator.expr(rng);
+
+        // Return borrow status to previous state (since RHS expression is self contained)
+        scope
+            .borrow_mut()
+            .set_borrow_status(var_name, prev_borrow_status);
 
         if let ScopeEntry::Var(var) = scope_entry.as_ref() {
             Ok(AssignStmt::new(var.clone(), expr))
@@ -239,7 +276,7 @@ impl<'a> StmtGenerator<'a> {
         ConditionalStmt::new_from_vec(conditional_blocks, else_body)
     }
 
-    pub fn static_struct_stmt<R: Rng>(
+    pub fn global_struct_stmt<R: Rng>(
         &self,
         struct_template: StructTemplate,
         scope: Rc<RefCell<Scope>>,
@@ -260,6 +297,10 @@ impl<'a> StmtGenerator<'a> {
             struct_gen::GLOBAL_STRUCT_VAR_NAME.to_string(),
             true,
         );
+
+        scope
+            .borrow_mut()
+            .add(var.get_name(), Rc::new(var.clone().as_scope_entry()));
 
         LetStmt::new(var, expr).as_stmt()
     }

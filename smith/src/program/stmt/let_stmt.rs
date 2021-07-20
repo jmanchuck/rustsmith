@@ -53,10 +53,10 @@ mod test {
         let var = Var::new(var_type, String::from("a"), false);
 
         // Const integer expression
-        let expr = IntExpr::new_u8(10);
+        let expr = IntExpr::new_i32(10);
         let expr = Expr::Arithmetic(ArithmeticExpr::Int(expr));
         let let_stmt = LetStmt::new(var, expr);
 
-        assert_eq!(let_stmt.to_string(), "let a: i32 = 10;".to_string());
+        assert_eq!(let_stmt.to_string(), "let a: i32 = 10i32;".to_string());
     }
 }

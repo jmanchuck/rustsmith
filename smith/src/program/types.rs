@@ -7,6 +7,16 @@ pub enum BorrowTypeID {
     MutRef,
 }
 
+impl BorrowTypeID {
+    pub fn as_borrow_status(self) -> BorrowStatus {
+        match self {
+            BorrowTypeID::None => BorrowStatus::None,
+            BorrowTypeID::Ref => BorrowStatus::Borrowed,
+            BorrowTypeID::MutRef => BorrowStatus::MutBorrowed,
+        }
+    }
+}
+
 impl ToString for BorrowTypeID {
     fn to_string(&self) -> String {
         match self {
@@ -15,6 +25,13 @@ impl ToString for BorrowTypeID {
             Self::MutRef => String::from("&mut "),
         }
     }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum BorrowStatus {
+    Borrowed,
+    MutBorrowed,
+    None,
 }
 
 #[derive(PartialEq, Clone, Hash, Eq, EnumDiscriminants, Debug)]

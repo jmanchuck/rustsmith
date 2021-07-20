@@ -10,9 +10,8 @@ use super::{
 use crate::{
     generator::struct_gen,
     program::{
-        expr::expr::RawExpr,
         function::{Function, Param},
-        stmt::expr_stmt::ExprStmt,
+        stmt::block_stmt::BlockStmt,
         types::{BorrowTypeID, TypeID},
         var::Var,
     },
@@ -71,7 +70,6 @@ impl<'a> FuncGenerator<'a> {
                 && param.get_type() == TypeID::StructType(struct_gen::GLOBAL_STRUCT_NAME.to_owned())
             {
                 param = self.gen_param(param_name.clone(), rng);
-                println!("Regenerating param since attempting to take another global struct");
             }
 
             if param.get_type() == TypeID::StructType(struct_gen::GLOBAL_STRUCT_NAME.to_owned()) {
@@ -81,9 +79,11 @@ impl<'a> FuncGenerator<'a> {
             let var = Var::from_param(&param);
             param_list.push(param.clone());
 
-            scope
-                .borrow_mut()
-                .add(param.get_name(), Rc::new(ScopeEntry::Var(var)));
+            scope.borrow_mut().add_with_borrow_type(
+                param.get_name(),
+                Rc::new(ScopeEntry::Var(var)),
+                param.get_borrow_type().as_borrow_status(),
+            );
         }
 
         param_list
@@ -115,33 +115,34 @@ impl<'a> FuncGenerator<'a> {
 
         let mut stmt_generator = StmtGenerator::new(self.struct_table);
 
-        // Generate block stmt with a return at the end
-        let mut block_stmt = stmt_generator.block_stmt_with_return(
-            Rc::clone(&function_scope),
-            stmt_gen::MAX_STMT_DEPTH,
-            rng,
-            return_type.clone(),
-        );
+        let block_stmt: BlockStmt;
 
         if is_main {
             match self.struct_table.get_global_struct() {
                 Some(struct_template) => {
-                    let global_let_stmt =
-                        stmt_generator.static_struct_stmt(struct_template.clone(), scope, rng);
-                    block_stmt.push_front(global_let_stmt);
-
-                    let print_serialized = RawExpr::new(format!(
-                        "println!(\"{{}}\", (serde_json::to_string(&{}).unwrap()))",
-                        struct_gen::GLOBAL_STRUCT_VAR_NAME
-                    ))
-                    .as_expr();
-
-                    let print_stmt = ExprStmt::new(print_serialized).as_stmt();
-
-                    block_stmt.push(print_stmt);
+                    block_stmt = stmt_generator.block_stmt_main(
+                        Rc::clone(&function_scope),
+                        struct_template,
+                        stmt_gen::MAX_STMT_DEPTH,
+                        rng,
+                    );
                 }
-                None => (),
+                None => {
+                    block_stmt = stmt_generator.block_stmt_with_return(
+                        Rc::clone(&function_scope),
+                        stmt_gen::MAX_STMT_DEPTH,
+                        rng,
+                        return_type.clone(),
+                    )
+                }
             }
+        } else {
+            block_stmt = stmt_generator.block_stmt_with_return(
+                Rc::clone(&function_scope),
+                stmt_gen::MAX_STMT_DEPTH,
+                rng,
+                return_type.clone(),
+            )
         }
 
         Function::new(func_name, params, return_type, block_stmt)

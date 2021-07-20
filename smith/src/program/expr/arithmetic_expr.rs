@@ -245,12 +245,12 @@ mod test {
         // binary expression 30 + 5
         let binary_expr = BinaryExpr::new(left_expr, right_expr, BinaryOp::ADD);
 
-        assert_eq!(binary_expr.to_string(), "30 + 5".to_string());
+        assert_eq!(binary_expr.to_string(), "30i32 + 5i32");
     }
 
     #[test]
     fn int_expr_has_correct_string_representation() {
         let value = IntValue::I32(5);
-        assert_eq!(IntExpr::new(value).to_string(), "5");
+        assert_eq!(IntExpr::new(value).to_string(), "5i32");
     }
 }

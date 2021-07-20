@@ -10,8 +10,8 @@ use super::struct_gen::StructTable;
 
 pub const MAX_STATICS: u32 = 2;
 pub const MAX_STRUCTS: u32 = 2;
-pub const MAX_FUNCS: u32 = 10;
-pub const MAX_FUNC_PARAMS: u32 = 12;
+pub const MAX_FUNCS: u32 = 8;
+pub const MAX_FUNC_PARAMS: u32 = 8;
 
 pub fn gen_main<R: Rng>(rng: &mut R) -> String {
     let mut func_count: u8 = 0;
