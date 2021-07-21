@@ -5,7 +5,7 @@ use rand::{
 };
 use strum::{EnumCount, IntoEnumIterator};
 
-const STMT_WEIGHTS: [u32; StmtVariants::COUNT] = [2, 0, 1, 2, 0, 0];
+const STMT_WEIGHTS: [u32; StmtVariants::COUNT] = [2, 0, 1, 4, 0, 0];
 
 impl Distribution<StmtVariants> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> StmtVariants {

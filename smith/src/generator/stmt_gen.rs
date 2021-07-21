@@ -25,9 +25,9 @@ use super::{
     struct_gen::{self, StructTable},
 };
 
-const MAX_STMTS_IN_BLOCK: u8 = 10;
-const MAX_CONDITIONAL_BRANCHES: u8 = 1;
-pub const MAX_STMT_DEPTH: u32 = 1; // Only refers to conditional statements
+const MAX_STMTS_IN_BLOCK: u8 = 12;
+const MAX_CONDITIONAL_BRANCHES: u8 = 4;
+pub const MAX_STMT_DEPTH: u32 = 2; // Only refers to conditional statements
 
 pub struct StmtGenerator<'a> {
     struct_table: &'a StructTable,
