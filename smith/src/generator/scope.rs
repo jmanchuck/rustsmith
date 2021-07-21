@@ -244,6 +244,7 @@ impl Scope {
     }
 
     pub fn set_borrow_status(&mut self, mut name: String, borrow_status: BorrowStatus) {
+        // Sets the entire struct entry borrow status
         if name.contains('.') {
             name = name.split_at(name.find('.').unwrap()).0.to_string();
         }
@@ -558,6 +559,72 @@ mod test {
         assert_eq!(
             scope.borrow().filter_with_closure(incorrect_closure).len(),
             0
+        );
+    }
+
+    #[test]
+    fn updates_borrow_status_correctly() {
+        let mut scope = Scope::new();
+        let type_id = IntTypeID::U8.as_type();
+        let var_name = String::from("a");
+
+        // Borrow status is None
+        scope.add(
+            var_name.clone(),
+            Rc::new(VarScopeEntry::new(type_id.clone(), var_name.clone(), false).as_scope_entry()),
+        );
+
+        // Set borrow status to mutably borrowed
+        scope.set_borrow_status(var_name, BorrowStatus::MutBorrowed);
+
+        assert!(scope.contains_filter(|x, y| x.is_var() && y == BorrowStatus::MutBorrowed));
+
+        assert!(!scope.contains_filter(|x, y| x.is_var() && y == BorrowStatus::None))
+    }
+
+    #[test]
+    fn changes_struct_borrow_status_when_borrowing_field() {
+        let mut scope = Scope::new();
+
+        let var_name = String::from("test");
+        let struct_name = String::from("Test");
+        let mut struct_template = StructTemplate::new(struct_name);
+
+        struct_template.insert_field(String::from("field_1"), IntTypeID::U8.as_type());
+
+        let struct_scope_entry = StructScopeEntry::new(
+            var_name.clone(),
+            BorrowTypeID::None,
+            struct_template,
+            vec![(String::from(".field_1"), IntTypeID::U8.as_type())],
+            false,
+        );
+
+        // Borrow status is None for the struct
+        scope.add(
+            var_name.clone(),
+            Rc::new(struct_scope_entry.as_scope_entry()),
+        );
+
+        // This should return a vec containing the struct's field
+        let result = scope.filter_with_closure(|x, y| x.is_var() && y == BorrowStatus::None);
+
+        assert_eq!(result.len(), 1);
+
+        // Before we borrow the struct field
+        assert_eq!(
+            scope.get_entries().get(&var_name).unwrap().1,
+            BorrowStatus::None
+        );
+
+        // Borrow the struct field
+        let (struct_field_name, _, _) = &result[0];
+        scope.set_borrow_status(struct_field_name.clone(), BorrowStatus::Borrowed);
+
+        // After we borrow the struct field
+        assert_eq!(
+            scope.get_entries().get(&var_name).unwrap().1,
+            BorrowStatus::Borrowed
         );
     }
 }

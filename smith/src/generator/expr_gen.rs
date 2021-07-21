@@ -100,6 +100,14 @@ impl<'a> ExprGenerator<'a> {
     }
 
     pub fn struct_expr<R: Rng>(&self, struct_name: String, rng: &mut R) -> StructExpr {
+        let struct_var_filter = |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
+            scope_entry.is_struct()
+                            && self.type_id == scope_entry.get_type()
+                            && self.borrow_type_id == scope_entry.get_borrow_type()
+                            // TODO: Change this to allow passing refs
+                            && borrow_status == BorrowStatus::None
+        };
+
         let struct_template = self
             .struct_table
             .get_struct_template(struct_name.clone())
@@ -114,23 +122,8 @@ impl<'a> ExprGenerator<'a> {
         let expr_choice: StructExprVariants = rng.gen();
 
         match expr_choice {
-            StructExprVariants::Var
-                if self.scope.borrow().contains_filter(
-                    |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
-                        scope_entry.is_struct()
-                            && self.type_id == scope_entry.get_type()
-                            && self.borrow_type_id == scope_entry.get_borrow_type()
-                            && borrow_status != BorrowStatus::MutBorrowed
-                            && if self.borrow_type_id == BorrowTypeID::None {
-                                // Require source var to be moveable if we're doing a move
-                                borrow_status == BorrowStatus::None
-                            } else {
-                                true
-                            }
-                    },
-                ) =>
-            {
-                let var = self.var(rng);
+            StructExprVariants::Var if self.scope.borrow().contains_filter(struct_var_filter) => {
+                let var = self.var(struct_var_filter, rng);
 
                 // Move only happens if it's not borrow
                 // For struct expression, using the expression is equivalent to a move
@@ -177,22 +170,21 @@ impl<'a> ExprGenerator<'a> {
 
     pub fn arith_expr<R: Rng>(&self, depth: u32, rng: &mut R) -> ArithmeticExpr {
         let expr_choice: ArithmeticExprVariants = rng.gen();
+        let arith_var_filter = |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
+            scope_entry.is_var()
+                && scope_entry.get_type() == self.type_id
+                && scope_entry.get_borrow_type() == self.borrow_type_id
+                && borrow_status != BorrowStatus::MutBorrowed
+        };
 
         match expr_choice {
             ArithmeticExprVariants::Binary if depth > 0 => {
                 self.binary_int_expr(depth, rng).as_arith_expr()
             }
             ArithmeticExprVariants::Var
-                if self.scope.borrow().contains_filter(
-                    |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
-                        scope_entry.is_var()
-                            && scope_entry.get_type() == self.type_id
-                            && scope_entry.get_borrow_type() == self.borrow_type_id
-                            && borrow_status != BorrowStatus::MutBorrowed
-                    },
-                ) =>
+                if self.scope.borrow().contains_filter(arith_var_filter) =>
             {
-                ArithmeticExpr::Var(self.var(rng))
+                ArithmeticExpr::Var(self.var(arith_var_filter, rng))
             }
 
             // We constrain nested function call depth to be the same as binary expr depth
@@ -233,7 +225,12 @@ impl<'a> ExprGenerator<'a> {
 
     pub fn bool_expr<R: Rng>(&self, depth: u32, rng: &mut R) -> BoolExpr {
         let expr_choice: BoolExprVariants = rng.gen();
-
+        let bool_var_filter = |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
+            scope_entry.is_var()
+                && scope_entry.get_type() == self.type_id
+                && scope_entry.get_borrow_type() == self.borrow_type_id
+                && borrow_status != BorrowStatus::MutBorrowed
+        };
         match expr_choice {
             BoolExprVariants::Binary if depth > 0 => {
                 self.binary_bool_expr(depth, rng).as_bool_expr()
@@ -257,17 +254,8 @@ impl<'a> ExprGenerator<'a> {
                     Err(s) => panic!("{}", s),
                 }
             }
-            BoolExprVariants::Var
-                if self.scope.borrow().contains_filter(
-                    |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
-                        scope_entry.is_var()
-                            && scope_entry.get_type() == self.type_id
-                            && scope_entry.get_borrow_type() == self.borrow_type_id
-                            && borrow_status != BorrowStatus::MutBorrowed
-                    },
-                ) =>
-            {
-                BoolExpr::Var(self.var(rng))
+            BoolExprVariants::Var if self.scope.borrow().contains_filter(bool_var_filter) => {
+                BoolExpr::Var(self.var(bool_var_filter, rng))
             }
             BoolExprVariants::Bool | _ => self.bool_literal(rng).as_bool_expr(),
         }
@@ -306,16 +294,11 @@ impl<'a> ExprGenerator<'a> {
         NegationExpr::new(bool_expr)
     }
 
-    fn var<R: Rng>(&self, rng: &mut R) -> Var {
-        let var_list = self
-            .scope
-            .borrow()
-            .filter_with_closure(|scope_entry, borrow_status| {
-                (scope_entry.is_var() || scope_entry.is_struct())
-                    && scope_entry.is_type(self.type_id.clone())
-                    && scope_entry.is_borrow_type(self.borrow_type_id.clone())
-                    && borrow_status != BorrowStatus::MutBorrowed
-            });
+    fn var<T, R: Rng>(&self, filter: T, rng: &mut R) -> Var
+    where
+        T: Fn(&ScopeEntry, BorrowStatus) -> bool,
+    {
+        let var_list = self.scope.borrow().filter_with_closure(filter);
 
         let var_choice = var_list.choose(rng).unwrap();
 
