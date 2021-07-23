@@ -1,7 +1,7 @@
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
-use crate::program::function::FunctionTemplate;
+use crate::program::function::{FunctionTemplate, Param};
 use crate::program::struct_template::StructTemplate;
 use crate::program::types::{BorrowStatus, BorrowTypeID, TypeID};
 use crate::program::var::Var;
@@ -135,6 +135,31 @@ impl StructScopeEntry {
             struct_template,
             fields_map,
             is_mut,
+        }
+    }
+
+    pub fn from_param(
+        param: &Param,
+        struct_template: StructTemplate,
+        flattened_fields: Vec<(String, TypeID)>,
+    ) -> Self {
+        // Mutable reference as param means that its fields can be assigned to
+        let is_mut_ref = param.get_borrow_type() == BorrowTypeID::MutRef;
+
+        let mut fields_map: BTreeMap<String, VarScopeEntry> = BTreeMap::new();
+        for (field_name, field_type) in flattened_fields {
+            let mapped_name = format!("{}{}", param.get_name(), field_name.clone());
+            let var_scope_entry = VarScopeEntry::new(field_type, mapped_name.clone(), is_mut_ref);
+            fields_map.insert(mapped_name, var_scope_entry);
+        }
+
+        // TODO: Allow mutable params
+        StructScopeEntry {
+            type_id: param.get_type(),
+            borrow_type: param.get_borrow_type(),
+            struct_template,
+            fields_map,
+            is_mut: false,
         }
     }
 

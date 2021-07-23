@@ -4,6 +4,11 @@ generatedPath="../src/bin/*.rs"
 
 declare -a opt_levels=("0" "3" "s")
 
+if [ ! -d "./executables" ]
+then
+    mkdir executables 
+fi
+
 cd executables 
 
 rm -rf ./*/

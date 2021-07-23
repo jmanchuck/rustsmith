@@ -62,7 +62,7 @@ impl Var {
             type_id: param.get_type(),
             borrow_type: param.get_borrow_type(),
             name: param.get_name(),
-            is_mut: false,
+            is_mut: param.get_borrow_type() == BorrowTypeID::MutRef,
         }
     }
 

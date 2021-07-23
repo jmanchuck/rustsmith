@@ -8,7 +8,7 @@ use super::{
     struct_gen::StructTable,
 };
 use crate::{
-    generator::struct_gen,
+    generator::{scope::StructScopeEntry, struct_gen},
     program::{
         function::{Function, Param},
         stmt::block_stmt::BlockStmt,
@@ -76,12 +76,29 @@ impl<'a> FuncGenerator<'a> {
                 has_global_struct = true;
             }
 
-            let var = Var::from_param(&param);
+            let scope_entry: ScopeEntry;
+
+            match param.get_type() {
+                TypeID::StructType(struct_name) => {
+                    let struct_template =
+                        self.struct_table.get_struct_template(&struct_name).unwrap();
+                    let flattened_fields = self.struct_table.flatten_struct(&struct_name);
+                    let struct_scope_entry =
+                        StructScopeEntry::from_param(&param, struct_template, flattened_fields);
+                    scope_entry = ScopeEntry::Struct(struct_scope_entry);
+                }
+                TypeID::NullType => panic!("Trying to generate param of null type"),
+                _ => {
+                    let var = Var::from_param(&param);
+                    scope_entry = ScopeEntry::Var(var);
+                }
+            }
+
             param_list.push(param.clone());
 
             scope.borrow_mut().add_with_borrow_type(
                 param.get_name(),
-                Rc::new(ScopeEntry::Var(var)),
+                Rc::new(scope_entry),
                 param.get_borrow_type().as_borrow_status(),
             );
         }

@@ -81,9 +81,7 @@ impl<'a> ExprGenerator<'a> {
             TypeID::IntType(_) => self.int_expr(rng).as_expr(),
             TypeID::StructType(struct_name) => self
                 .struct_literal(
-                    self.struct_table
-                        .get_struct_template(struct_name.clone())
-                        .unwrap(),
+                    self.struct_table.get_struct_template(&struct_name).unwrap(),
                     rng,
                 )
                 .as_struct_expr()
@@ -110,7 +108,7 @@ impl<'a> ExprGenerator<'a> {
 
         let struct_template = self
             .struct_table
-            .get_struct_template(struct_name.clone())
+            .get_struct_template(&struct_name)
             .unwrap_or_else(|| {
                 panic!(
                     "Table: {:?}, searching: {}",

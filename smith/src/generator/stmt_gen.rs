@@ -51,11 +51,8 @@ impl<'a> StmtGenerator<'a> {
         let mut stmt_list: Vec<Stmt> = Vec::new();
 
         for _ in 0..MAX_STMTS_IN_BLOCK {
-            let result = self.stmt(Rc::clone(&scope), depth, rng);
-            match result {
-                Ok(stmt) => stmt_list.push(stmt),
-                Err(_msg) => (),
-            }
+            let stmt = self.stmt(Rc::clone(&scope), depth, rng);
+            stmt_list.push(stmt);
         }
 
         BlockStmt::new_from_vec(stmt_list)
@@ -73,11 +70,8 @@ impl<'a> StmtGenerator<'a> {
         stmt_list.push(self.global_struct_stmt(struct_template, Rc::clone(&scope), rng));
 
         for _ in 1..MAX_STMTS_IN_BLOCK - 1 {
-            let result = self.stmt(Rc::clone(&scope), depth, rng);
-            match result {
-                Ok(stmt) => stmt_list.push(stmt),
-                Err(_msg) => (),
-            }
+            let stmt = self.stmt(Rc::clone(&scope), depth, rng);
+            stmt_list.push(stmt);
         }
 
         let print_serialized = RawExpr::new(format!(
@@ -122,26 +116,17 @@ impl<'a> StmtGenerator<'a> {
         block_stmt
     }
 
-    pub fn stmt<R: Rng>(
-        &mut self,
-        scope: Rc<RefCell<Scope>>,
-        depth: u32,
-        rng: &mut R,
-    ) -> Result<Stmt, String> {
+    pub fn stmt<R: Rng>(&mut self, scope: Rc<RefCell<Scope>>, depth: u32, rng: &mut R) -> Stmt {
         let stmt_select: StmtVariants = rng.gen();
 
         match stmt_select {
             StmtVariants::AssignStatement if scope.borrow().mut_count() > 0 => {
-                let assign_stmt = self.assign_stmt(scope, rng);
-                match assign_stmt {
-                    Ok(assign_stmt) => Ok(assign_stmt.as_stmt()),
-                    Err(s) => Err(s),
-                }
+                self.assign_stmt(scope, rng).as_stmt()
             }
             StmtVariants::ConditionalStatement if depth > 0 => {
-                Ok(self.conditional_stmt(scope, depth, rng).as_stmt())
+                self.conditional_stmt(scope, depth, rng).as_stmt()
             }
-            StmtVariants::LetStatement | _ => Ok(self.let_stmt(scope, rng).as_stmt()),
+            StmtVariants::LetStatement | _ => self.let_stmt(scope, rng).as_stmt(),
         }
     }
 
@@ -175,10 +160,8 @@ impl<'a> StmtGenerator<'a> {
             let struct_scope_entry = StructScopeEntry::new(
                 var.get_name(),
                 BorrowTypeID::None,
-                self.struct_table
-                    .get_struct_template(struct_name.clone())
-                    .unwrap(),
-                self.struct_table.flatten_struct(struct_name),
+                self.struct_table.get_struct_template(&struct_name).unwrap(),
+                self.struct_table.flatten_struct(&struct_name),
                 is_mut,
             );
             scope_entry = ScopeEntry::Struct(struct_scope_entry);
@@ -190,30 +173,27 @@ impl<'a> StmtGenerator<'a> {
         LetStmt::new(var, expr)
     }
 
-    // TODO: Refactor away from conservative borrow on mutable assignment to field
-    // Currently removes entire struct from scope instead of hiding it
-    pub fn assign_stmt<R: Rng>(
-        &mut self,
-        scope: Rc<RefCell<Scope>>,
-        rng: &mut R,
-    ) -> Result<AssignStmt, String> {
+    // TODO: Use the borrow context struct to manage borrows
+    pub fn assign_stmt<R: Rng>(&mut self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> AssignStmt {
         // TODO: If this LHS is a field of a struct, then the entire struct should be considered borrowed
         // Had the issue of: let mut a = struct -> a.field = function(a, other_args), a cannot be function arg
         let var_choice = scope.borrow().rand_mut(rng);
         let (var_name, scope_entry, prev_borrow_status) = var_choice;
 
+        // TODO: Test this in playground
         scope
             .borrow_mut()
             .set_borrow_status(var_name.clone(), BorrowStatus::MutBorrowed);
 
         let type_id = scope_entry.get_type();
-        let borrow_type_id = scope_entry.get_borrow_type();
 
+        // TODO: When we allow references as variables, assignment must have the same ref type
+        // For the case of mutable references, we can assign regardless of ref type
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&scope),
             type_id.clone(),
-            borrow_type_id,
+            BorrowTypeID::None,
             expr_gen::MAX_EXPR_DEPTH,
         );
 
@@ -222,16 +202,16 @@ impl<'a> StmtGenerator<'a> {
         // Return borrow status to previous state (since RHS expression is self contained)
         scope
             .borrow_mut()
-            .set_borrow_status(var_name, prev_borrow_status);
+            .set_borrow_status(var_name.clone(), prev_borrow_status);
 
-        if let ScopeEntry::Var(var) = scope_entry.as_ref() {
-            Ok(AssignStmt::new(var.clone(), expr))
-        } else {
-            Err(format!(
-                "Var choice is not type var, found {}",
-                scope_entry.get_type().to_string()
-            ))
-        }
+        let left_var = Var::new(scope_entry.get_type(), var_name, true);
+
+        // If we are assigning directly onto a mutable reference, we need to dereference it
+        AssignStmt::new(
+            left_var,
+            expr,
+            scope_entry.is_borrow_type(BorrowTypeID::MutRef),
+        )
     }
 
     pub fn conditional_stmt<R: Rng>(
