@@ -23,6 +23,6 @@ do
     echo "," >> ../output.json
     cd ..
 done
-sed -i '' -e '$ d' ../output.json
+sed -i '' -e '$ d' ./output.json
 
 echo "}" >> output.json

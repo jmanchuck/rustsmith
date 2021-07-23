@@ -177,7 +177,20 @@ impl<'a> StmtGenerator<'a> {
     pub fn assign_stmt<R: Rng>(&mut self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> AssignStmt {
         // TODO: If this LHS is a field of a struct, then the entire struct should be considered borrowed
         // Had the issue of: let mut a = struct -> a.field = function(a, other_args), a cannot be function arg
-        let var_choice = scope.borrow().rand_mut(rng);
+        let mut var_choice = scope.borrow().rand_mut(rng);
+
+        let mut i = 0;
+        // Disable doing assignment to the global struct since we may miss out on errors
+        while var_choice.1.get_type()
+            == TypeID::StructType(struct_gen::GLOBAL_STRUCT_NAME.to_string())
+        {
+            var_choice = scope.borrow().rand_mut(rng);
+            i += 1;
+            if i > 100 {
+                println!("No other mutables found, must assign to global struct");
+                break;
+            }
+        }
         let (var_name, scope_entry, prev_borrow_status) = var_choice;
 
         // TODO: Test this in playground
@@ -272,16 +285,30 @@ impl<'a> StmtGenerator<'a> {
 
         let expr = expr_generator.global_struct_expr(rng).as_expr();
 
-        let var = Var::new(
-            struct_template.get_type(),
+        let flattened_fields = self.struct_table.flatten_struct_template(&struct_template);
+
+        let scope_entry = StructScopeEntry::new(
+            struct_gen::GLOBAL_STRUCT_VAR_NAME.to_string(),
+            BorrowTypeID::None,
+            struct_template,
+            flattened_fields,
+            true,
+        )
+        .as_scope_entry();
+
+        let global_struct_type = scope_entry.get_type();
+
+        scope.borrow_mut().add(
+            struct_gen::GLOBAL_STRUCT_VAR_NAME.to_string(),
+            Rc::new(scope_entry),
+        );
+
+        let left_var = Var::new(
+            global_struct_type,
             struct_gen::GLOBAL_STRUCT_VAR_NAME.to_string(),
             true,
         );
 
-        scope
-            .borrow_mut()
-            .add(var.get_name(), Rc::new(var.clone().as_scope_entry()));
-
-        LetStmt::new(var, expr).as_stmt()
+        LetStmt::new(left_var, expr).as_stmt()
     }
 }

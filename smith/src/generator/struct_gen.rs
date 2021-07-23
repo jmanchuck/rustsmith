@@ -70,6 +70,13 @@ impl StructTable {
             .get_struct_template(&struct_name)
             .unwrap_or_else(|| panic!("Could not find struct template"));
 
+        self.flatten_struct_template(&struct_template)
+    }
+
+    pub fn flatten_struct_template(
+        &self,
+        struct_template: &StructTemplate,
+    ) -> Vec<(String, TypeID)> {
         let mut result: Vec<(String, TypeID)> = Vec::new();
         for (field_name, field_type) in struct_template.fields_iter() {
             if let TypeID::StructType(struct_name) = field_type {
