@@ -1,4 +1,4 @@
-mod borrow_context;
+mod borrow_scope;
 mod expr_gen;
 mod func_gen;
 pub mod main_gen;
