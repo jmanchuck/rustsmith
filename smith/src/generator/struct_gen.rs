@@ -5,12 +5,13 @@ use crate::program::{
 use rand::{prelude::SliceRandom, Rng};
 use std::{collections::BTreeMap, fmt};
 
-use super::{main_gen, name_gen::NameGenerator};
+use super::name_gen::NameGenerator;
 
 const MAX_STRUCT_FIELDS: u32 = 10;
 
 pub const GLOBAL_STRUCT_NAME: &str = "StructGlobal";
 pub const GLOBAL_STRUCT_VAR_NAME: &str = "struct_global";
+const NUM_GLOBAL_STRUCT_FIELDS: u32 = 20;
 
 // Each struct is represented by its name and contains a list of types as fields
 pub struct StructTable {
@@ -44,7 +45,7 @@ impl StructTable {
         let mut struct_template = StructTemplate::new(name.clone());
         let mut field_name_gen = NameGenerator::new(String::from("field_"));
 
-        for _ in 0..main_gen::MAX_STATICS {
+        for _ in 0..NUM_GLOBAL_STRUCT_FIELDS {
             struct_template.insert_field(field_name_gen.next().unwrap(), IntTypeID::I32.as_type());
         }
 
@@ -64,16 +65,23 @@ impl StructTable {
             .insert(struct_template.get_name(), struct_template);
     }
 
-    pub fn flatten_struct(&self, struct_name: String) -> Vec<(String, TypeID)> {
+    pub fn flatten_struct(&self, struct_name: &String) -> Vec<(String, TypeID)> {
         let struct_template = self
-            .get_struct_template(struct_name.clone())
+            .get_struct_template(&struct_name)
             .unwrap_or_else(|| panic!("Could not find struct template"));
 
+        self.flatten_struct_template(&struct_template)
+    }
+
+    pub fn flatten_struct_template(
+        &self,
+        struct_template: &StructTemplate,
+    ) -> Vec<(String, TypeID)> {
         let mut result: Vec<(String, TypeID)> = Vec::new();
         for (field_name, field_type) in struct_template.fields_iter() {
             if let TypeID::StructType(struct_name) = field_type {
                 // Recursively flatten fields until we get to primitive
-                let nested_fields = self.flatten_struct(struct_name.clone());
+                let nested_fields = self.flatten_struct(struct_name);
                 for (nested_field_name, nested_field_type) in nested_fields {
                     let flattened_entry = (
                         format!(".{}{}", field_name, nested_field_name.clone()),
@@ -125,11 +133,11 @@ impl StructTable {
         struct_templates.choose(rng).unwrap().clone()
     }
 
-    pub fn get_struct_template(&self, name: String) -> Option<StructTemplate> {
-        match self.structs.get(&name) {
+    pub fn get_struct_template(&self, name: &String) -> Option<StructTemplate> {
+        match self.structs.get(name) {
             Some(struct_template) => Some(struct_template.clone()),
             None => match &self.global_struct {
-                Some(struct_template) if name == struct_template.get_name() => {
+                Some(struct_template) if *name == struct_template.get_name() => {
                     Some(struct_template.clone())
                 }
                 _ => None,
@@ -138,13 +146,16 @@ impl StructTable {
     }
 
     pub fn rand_type_with_global<R: Rng>(&self, rng: &mut R) -> TypeID {
-        let mut loop_limit = 5;
+        let mut loop_limit = 20;
+
         loop {
-            let selected: TypeIDVariants = rng.gen();
-            loop_limit -= 1;
+            let mut selected: TypeIDVariants = rng.gen();
             if loop_limit < 0 {
-                println!("{:#?}", self.structs);
-                panic!("Multiple attempts to get random type failed");
+                if rng.gen::<bool>() {
+                    selected = TypeIDVariants::IntType;
+                } else {
+                    selected = TypeIDVariants::BoolType;
+                }
             }
             match selected {
                 TypeIDVariants::StructType if self.len() > 0 => {
@@ -152,22 +163,32 @@ impl StructTable {
                 }
 
                 // Inclusive of the NullType
-                TypeIDVariants::IntType | _ => {
+                TypeIDVariants::IntType => {
                     let int_type_id: IntTypeID = rng.gen();
                     return int_type_id.as_type();
+                }
+
+                TypeIDVariants::BoolType => return TypeID::BoolType,
+
+                _ => {
+                    loop_limit -= 1;
+                    continue;
                 }
             }
         }
     }
 
     pub fn rand_type<R: Rng>(&self, rng: &mut R) -> TypeID {
-        let mut loop_limit = 5;
+        let mut loop_limit = 20;
         loop {
-            let selected: TypeIDVariants = rng.gen();
+            let mut selected: TypeIDVariants = rng.gen();
             loop_limit -= 1;
             if loop_limit < 0 {
-                println!("{:#?}", self.structs);
-                panic!("Multiple attempts to get random type failed");
+                if rng.gen::<bool>() {
+                    selected = TypeIDVariants::IntType;
+                } else {
+                    selected = TypeIDVariants::BoolType;
+                }
             }
             match selected {
                 // Can only choose a struct type if the struct table contains previously generated structs
@@ -181,22 +202,32 @@ impl StructTable {
                 }
 
                 // Inclusive of the NullType
-                TypeIDVariants::IntType | _ => {
+                TypeIDVariants::IntType => {
                     let int_type_id: IntTypeID = rng.gen();
                     return int_type_id.as_type();
+                }
+
+                TypeIDVariants::BoolType => return TypeID::BoolType,
+
+                _ => {
+                    loop_limit -= 1;
+                    continue;
                 }
             }
         }
     }
 
     pub fn rand_type_with_null<R: Rng>(&self, rng: &mut R) -> TypeID {
-        let mut loop_limit = 5;
+        let mut loop_limit = 20;
         loop {
-            let selected: TypeIDVariants = rng.gen();
+            let mut selected: TypeIDVariants = rng.gen();
             loop_limit -= 1;
             if loop_limit < 0 {
-                println!("{:#?}", self.structs);
-                panic!("Multiple attempts to get random type failed");
+                if rng.gen::<bool>() {
+                    selected = TypeIDVariants::IntType;
+                } else {
+                    selected = TypeIDVariants::BoolType;
+                }
             }
             match selected {
                 // Can only choose a struct type if the struct table contains previously generated structs
@@ -211,6 +242,7 @@ impl StructTable {
                     let int_type_id: IntTypeID = rng.gen();
                     return int_type_id.as_type();
                 }
+                TypeIDVariants::BoolType => return TypeID::BoolType,
                 _ => continue,
             }
         }
@@ -262,7 +294,7 @@ mod test {
         table.insert_struct(struct_b);
 
         /* FLATENNING THE STRUCT TEMPLATE */
-        let flattened_fields = table.flatten_struct(struct_a_name);
+        let flattened_fields = table.flatten_struct(&struct_a_name);
 
         assert_eq!(flattened_fields.len(), 6);
 

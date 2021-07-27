@@ -1,7 +1,4 @@
-use crate::program::{
-    function::{FunctionTemplate, Param},
-    types::TypeID,
-};
+use crate::program::{function::FunctionTemplate, types::TypeID};
 
 use super::expr::Expr;
 
@@ -28,11 +25,10 @@ impl ToString for FunctionCallExpr {
         let mut result: Vec<String> = Vec::new();
         let func_name = self.function_template.get_name();
 
-        let params: Vec<&Param> = self.function_template.params_iter().collect();
         for i in 0..self.arguments.len() {
             let arg_string = format!(
-                "{}{}",
-                params[i].get_borrow_type().to_string(),
+                "{}",
+                // params[i].get_borrow_type().to_string(),
                 self.arguments[i].to_string()
             );
             result.push(arg_string);
@@ -44,7 +40,7 @@ impl ToString for FunctionCallExpr {
 
 #[cfg(test)]
 mod test {
-    use crate::program::{expr::int_expr::IntExpr, function::Param, types::IntTypeID};
+    use crate::program::{expr::arithmetic_expr::IntExpr, function::Param, types::IntTypeID};
 
     use super::*;
     #[test]
@@ -58,6 +54,6 @@ mod test {
         let arg = IntExpr::new_i32(20).as_expr();
         let call_expr = FunctionCallExpr::new(function_template, vec![arg]);
 
-        assert_eq!(call_expr.to_string(), "test_function(20)");
+        assert_eq!(call_expr.to_string(), "test_function(20i32)");
     }
 }

@@ -2,6 +2,7 @@ use std::fmt;
 
 use super::types::TypeID;
 
+// Representation of a struct's name, fields (and their types) and any derive macro attributes
 #[derive(Clone)]
 pub struct StructTemplate {
     fields: Vec<(String, TypeID)>,

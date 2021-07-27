@@ -2,20 +2,31 @@
 
 generatedPath="../src/bin/*.rs"
 
+declare -a opt_levels=("0" "3" "s")
+
+if [ ! -d "./executables" ]
+then
+    mkdir executables 
+fi
+
 cd executables 
 
 rm -rf ./*/
-
-mkdir opt3
-mkdir optS 
-mkdir opt0
-
-for file in $generatedPath;
+for opt_level in "${opt_levels[@]}";
 do
-    filename=$(basename $file)
-    cargo +nightly build --bins --profile opt3 -Z unstable-options --out-dir ./opt3
-    cargo +nightly build --bins --profile optS -Z unstable-options --out-dir ./optS
-    cargo +nightly build --bins --profile opt0 -Z unstable-options --out-dir ./opt0
+    i=0
+    echo $opt_level
+    mkdir $opt_level
+    export CARGO_PROFILE_RELEASE_OPT_LEVEL=$opt_level
+    for file in $generatedPath;
+        do
+            filename=$(basename $file)
+            cargo build --bins --release --target-dir ./"$opt_level"/
+            # cargo build --bins --target-dir .
+            # cargo +nightly build --bins --profile optS --target-dir . -Z unstable-options
+        done
 done
+
+unset "CARGO_PROFILE_RELEASE_OPT_LEVEL"
 
 find . -name "generated" -type f -delete

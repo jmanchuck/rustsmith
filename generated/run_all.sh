@@ -8,14 +8,21 @@ echo "{" >> output.json
 for dir in ./*/;
 do 
     cd $dir 
+    echo "Running binaries from $dir"
     echo "\"$(basename $dir)\": {" >> ../output.json
-    for file in ./*;
+    for file in ./release/*;
     do 
-        output=$(./$file)
-        echo "\"$(basename $file)\": $output," >> ../output.json
+        if [[ -f $file && -x $file ]]; then
+            output=$(./$file)
+            echo "\"$(basename $file)\": $output" >> ../output.json
+            echo "," >> ../output.json
+        fi
     done
-    echo "}," >> ../output.json
+    sed -i '' -e '$ d' ../output.json
+    echo "}" >> ../output.json
+    echo "," >> ../output.json
     cd ..
 done
+sed -i '' -e '$ d' ./output.json
 
 echo "}" >> output.json

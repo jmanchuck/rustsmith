@@ -1,8 +1,12 @@
 use super::{
+    expr::expr::Expr,
     function::Param,
     types::{BorrowTypeID, TypeID},
 };
-
+// Variable representation - just it's name
+// Acts as both LHS and RHS in assignment/let statement
+// Can be part of an expression or an expression itself
+// Used for variable scope entry
 #[derive(Clone, Debug)]
 pub struct Var {
     type_id: TypeID,
@@ -58,8 +62,12 @@ impl Var {
             type_id: param.get_type(),
             borrow_type: param.get_borrow_type(),
             name: param.get_name(),
-            is_mut: false,
+            is_mut: param.get_borrow_type() == BorrowTypeID::MutRef,
         }
+    }
+
+    pub fn as_expr(self) -> Expr {
+        Expr::Variable(self)
     }
 
     pub fn is_mut(&self) -> bool {

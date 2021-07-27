@@ -3,7 +3,6 @@ use crate::program::{struct_template::StructTemplate, var::Var};
 use super::expr::{Expr, LiteralExpr};
 use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
 
-// Used to represent the construction of a struct given a template
 #[derive(EnumDiscriminants)]
 #[strum_discriminants(vis(pub))]
 #[strum_discriminants(name(StructExprVariants))]
@@ -28,6 +27,7 @@ impl ToString for StructExpr {
     }
 }
 
+// Expression for instantiation of a struct
 pub struct StructLiteral {
     struct_template: StructTemplate,
     field_values: Vec<Expr>,
@@ -39,6 +39,10 @@ impl StructLiteral {
             struct_template,
             field_values,
         }
+    }
+
+    pub fn as_struct_expr(self) -> StructExpr {
+        StructExpr::Literal(self)
     }
 }
 

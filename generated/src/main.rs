@@ -6,7 +6,7 @@ fn main() {
 
     println!("{:#?}", config);
 
-    let progress_bar = ProgressBar::new(100);
+    let progress_bar = ProgressBar::new(config.count());
 
     for seed in config.seed()..config.seed() + config.count() {
         let code = smith::generate_from_seed(seed);
@@ -18,7 +18,7 @@ fn main() {
             Err(err) => panic!("Failed to generate, {}", err),
         };
 
-        progress_bar.inc((seed - config.seed()) / config.count() as u64);
+        progress_bar.inc(1);
     }
 }
 

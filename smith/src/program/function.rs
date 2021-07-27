@@ -3,6 +3,7 @@ use std::fmt;
 use super::types::{BorrowTypeID, TypeID};
 use crate::program::stmt::block_stmt::BlockStmt;
 
+// Contains required information to generate and invoke a function call
 #[derive(Clone)]
 pub struct FunctionTemplate {
     name: String,
@@ -40,6 +41,7 @@ impl FunctionTemplate {
     }
 }
 
+// Main AST representation for a function
 pub struct Function {
     block_stmt: BlockStmt,
     function_template: FunctionTemplate,
@@ -124,7 +126,7 @@ impl Param {
         }
     }
 
-    pub fn new_ref(type_id: TypeID, name: String) -> Self {
+    pub fn new_ref(name: String, type_id: TypeID) -> Self {
         Param {
             name,
             type_id,
@@ -132,7 +134,7 @@ impl Param {
         }
     }
 
-    pub fn new_mut_ref(type_id: TypeID, name: String) -> Self {
+    pub fn new_mut_ref(name: String, type_id: TypeID) -> Self {
         Param {
             name,
             type_id,
@@ -172,8 +174,8 @@ mod test {
     use crate::program::var::Var;
     use crate::program::{
         expr::{
-            expr::{ArithmeticExpr, Expr},
-            int_expr::IntExpr,
+            arithmetic_expr::{ArithmeticExpr, IntExpr},
+            expr::Expr,
         },
         stmt::stmt::Stmt,
     };

@@ -10,8 +10,8 @@ use super::struct_gen::StructTable;
 
 pub const MAX_STATICS: u32 = 2;
 pub const MAX_STRUCTS: u32 = 2;
-pub const MAX_FUNCS: u32 = 10;
-pub const MAX_FUNC_PARAMS: u32 = 12;
+pub const MAX_FUNCS: u32 = 8;
+pub const MAX_FUNC_PARAMS: u32 = 8;
 
 pub fn gen_main<R: Rng>(rng: &mut R) -> String {
     let mut func_count: u8 = 0;
@@ -33,19 +33,6 @@ pub fn gen_main<R: Rng>(rng: &mut R) -> String {
         let struct_template = struct_table.gen_struct(rng);
         program.push_struct_template(struct_template);
     }
-
-    // let mut static_gen = StaticGenerator::new();
-
-    // loop {
-    //     // break on some probability proportional to number of generated statics vs max (linear)
-    //     if rng.gen_range(0.0..1.0) < static_count as f32 / MAX_STATICS as f32 {
-    //         break;
-    //     }
-    //     let static_stmt = static_gen.gen_static(Rc::clone(&current_scope), rng);
-    //     program.push_static_stmt(static_stmt);
-
-    //     static_count += 1;
-    // }
 
     let mut func_gen = FuncGenerator::new(&struct_table, MAX_FUNC_PARAMS);
 

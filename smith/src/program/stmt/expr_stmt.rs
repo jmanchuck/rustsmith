@@ -2,6 +2,7 @@ use crate::program::expr::expr::Expr;
 
 use super::stmt::Stmt;
 
+// An expression where its value or return value isn't used
 pub struct ExprStmt {
     expr: Expr,
 }

@@ -7,6 +7,16 @@ pub enum BorrowTypeID {
     MutRef,
 }
 
+impl BorrowTypeID {
+    pub fn as_borrow_status(self) -> BorrowStatus {
+        match self {
+            BorrowTypeID::None => BorrowStatus::None,
+            BorrowTypeID::Ref => BorrowStatus::Borrowed,
+            BorrowTypeID::MutRef => BorrowStatus::MutBorrowed,
+        }
+    }
+}
+
 impl ToString for BorrowTypeID {
     fn to_string(&self) -> String {
         match self {
@@ -17,6 +27,13 @@ impl ToString for BorrowTypeID {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum BorrowStatus {
+    Borrowed,
+    MutBorrowed,
+    None,
+}
+
 #[derive(PartialEq, Clone, Hash, Eq, EnumDiscriminants, Debug)]
 #[strum_discriminants(vis(pub))]
 #[strum_discriminants(name(TypeIDVariants))]
@@ -24,6 +41,7 @@ impl ToString for BorrowTypeID {
 pub enum TypeID {
     IntType(IntTypeID),
     StructType(String), // String to denote the struct name
+    BoolType,
     NullType,
 }
 
@@ -32,6 +50,7 @@ impl TypeID {
         match self {
             Self::IntType(int_type_id) => int_type_id.to_string(),
             Self::StructType(string) => string.clone(),
+            &Self::BoolType => String::from("bool"),
             Self::NullType => String::from(""),
         }
     }
