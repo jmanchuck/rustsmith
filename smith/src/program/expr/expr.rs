@@ -3,8 +3,8 @@ use crate::program::var::Var;
 use super::arithmetic_expr::{ArithmeticExpr, IntExpr};
 use super::bool_expr::BoolExpr;
 use super::borrow_expr::BorrowExpr;
+use super::for_loop_expr::ForLoopExpr;
 use super::struct_expr::StructExpr;
-use super::{rc_expr::RcExpr, refcell_expr::RefCellExpr};
 
 // The top most form of an expression
 pub enum Expr {
@@ -13,8 +13,7 @@ pub enum Expr {
     Literal(LiteralExpr),
     Variable(Var),
     Borrow(Box<BorrowExpr>),
-    Rc(Box<RcExpr>),
-    RefCell(Box<RefCellExpr>),
+    Loop(ForLoopExpr),
 }
 
 impl ToString for Expr {
@@ -25,8 +24,7 @@ impl ToString for Expr {
             Self::Variable(s) => s.to_string(),
             Self::Boolean(s) => s.to_string(),
             Self::Borrow(s) => (*s).to_string(),
-            Self::Rc(s) => (*s).to_string(),
-            Self::RefCell(s) => (*s).to_string(),
+            Self::Loop(s) => s.to_string(),
         }
     }
 }

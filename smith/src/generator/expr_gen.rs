@@ -27,17 +27,17 @@ use super::{
 
 pub const MAX_EXPR_DEPTH: u32 = 4;
 
-pub struct ExprGenerator<'a> {
-    struct_table: &'a StructTable,
+pub struct ExprGenerator<'table> {
+    struct_table: &'table StructTable,
     scope: Rc<RefCell<Scope>>,
     type_id: TypeID,
     borrow_type_id: BorrowTypeID,
     depth: u32,
 }
 
-impl<'a> ExprGenerator<'a> {
+impl<'table> ExprGenerator<'table> {
     pub fn new(
-        struct_table: &'a StructTable,
+        struct_table: &'table StructTable,
         scope: Rc<RefCell<Scope>>,
         type_id: TypeID,
         borrow_type_id: BorrowTypeID,
@@ -53,7 +53,7 @@ impl<'a> ExprGenerator<'a> {
     }
 
     pub fn new_sub_expr(
-        other: &'a ExprGenerator,
+        other: &'table ExprGenerator,
         type_id: TypeID,
         borrow_type_id: BorrowTypeID,
     ) -> Self {
@@ -106,17 +106,6 @@ impl<'a> ExprGenerator<'a> {
                             && borrow_status == BorrowStatus::None
         };
 
-        let struct_template = self
-            .struct_table
-            .get_struct_template(&struct_name)
-            .unwrap_or_else(|| {
-                panic!(
-                    "Table: {:?}, searching: {}",
-                    self.struct_table,
-                    struct_name.clone()
-                );
-            });
-
         let expr_choice: StructExprVariants = rng.gen();
 
         match expr_choice {
@@ -126,13 +115,23 @@ impl<'a> ExprGenerator<'a> {
                 // Move only happens if it's not borrow
                 // For struct expression, using the expression is equivalent to a move
                 if self.borrow_type_id == BorrowTypeID::None {
-                    self.scope.borrow_mut().remove_entry(var.get_name());
+                    self.scope.borrow_mut().remove_entry(&var.get_name());
                 }
 
                 // Return variable
                 StructExpr::Var(var)
             }
             StructExprVariants::Literal | _ => {
+                let struct_template = self
+                    .struct_table
+                    .get_struct_template(&struct_name)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Table: {:?}, searching: {}",
+                            self.struct_table,
+                            struct_name.clone()
+                        );
+                    });
                 StructExpr::Literal(self.struct_literal(struct_template, rng))
             }
         }
@@ -175,6 +174,12 @@ impl<'a> ExprGenerator<'a> {
                 && borrow_status != BorrowStatus::MutBorrowed
         };
 
+        let arith_func_filter = |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
+            scope_entry.is_func()
+                && scope_entry.get_type() == self.type_id
+                && scope_entry.get_borrow_type() == self.borrow_type_id
+        };
+
         match expr_choice {
             ArithmeticExprVariants::Binary if depth > 0 => {
                 self.binary_int_expr(depth, rng).as_arith_expr()
@@ -187,11 +192,7 @@ impl<'a> ExprGenerator<'a> {
 
             // We constrain nested function call depth to be the same as binary expr depth
             ArithmeticExprVariants::Func
-                if self
-                    .scope
-                    .borrow()
-                    .contains_function_type(self.type_id.clone())
-                    && depth > 0 =>
+                if self.scope.borrow().contains_filter(arith_func_filter) && depth > 0 =>
             {
                 let result = self.func_call_expr(rng);
 
@@ -229,6 +230,12 @@ impl<'a> ExprGenerator<'a> {
                 && scope_entry.get_borrow_type() == self.borrow_type_id
                 && borrow_status != BorrowStatus::MutBorrowed
         };
+        let bool_func_filter = |scope_entry: &ScopeEntry, _| -> bool {
+            scope_entry.is_func()
+                && scope_entry.get_type() == self.type_id
+                && scope_entry.get_borrow_type() == self.borrow_type_id
+        };
+
         match expr_choice {
             BoolExprVariants::Binary if depth > 0 => {
                 self.binary_bool_expr(depth, rng).as_bool_expr()
@@ -240,11 +247,7 @@ impl<'a> ExprGenerator<'a> {
                 self.negation_expr(depth, rng).as_bool_expr()
             }
             BoolExprVariants::Func
-                if self
-                    .scope
-                    .borrow()
-                    .contains_function_type(self.type_id.clone())
-                    && depth > 0 =>
+                if self.scope.borrow().contains_filter(bool_func_filter) && depth > 0 =>
             {
                 let result = self.func_call_expr(rng);
                 match result {
@@ -385,7 +388,7 @@ impl<'a> ExprGenerator<'a> {
 
                 self.scope
                     .borrow_mut()
-                    .set_borrow_status(entry_name.clone(), BorrowStatus::MutBorrowed);
+                    .mut_borrow_entry(&"temp_mut_borrow".to_string(), entry_name);
 
                 // We explicitly borrow if the borrow type isn't a mut ref (i.e. it's a literal so we have to &mut)
                 Ok(BorrowExpr::new(
@@ -414,7 +417,7 @@ impl<'a> ExprGenerator<'a> {
 
                 self.scope
                     .borrow_mut()
-                    .set_borrow_status(entry_name.clone(), BorrowStatus::Borrowed);
+                    .borrow_entry(&"temp_borrow".to_string(), entry_name);
 
                 Ok(BorrowExpr::new(
                     BorrowTypeID::Ref,

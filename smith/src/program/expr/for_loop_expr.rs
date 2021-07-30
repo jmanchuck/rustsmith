@@ -1,6 +1,6 @@
 use crate::program::{stmt::block_stmt::BlockStmt, types::TypeID, var::Var};
 
-use super::iter_expr::IterExpr;
+use super::{expr::Expr, iter_expr::IterExpr};
 
 // TypeID is for the loop's iter expression
 pub struct ForLoopExpr {
@@ -22,6 +22,10 @@ impl ForLoopExpr {
 
     pub fn get_type(&self) -> TypeID {
         self.type_id.clone()
+    }
+
+    pub fn as_expr(self) -> Expr {
+        Expr::Loop(self)
     }
 }
 

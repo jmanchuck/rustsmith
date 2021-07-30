@@ -1,9 +1,9 @@
 use std::{cell::RefCell, rc::Rc};
 
-use rand::Rng;
+use rand::{prelude::SliceRandom, Rng};
 
 use crate::program::{
-    expr::{bool_expr::BoolExpr, expr::RawExpr},
+    expr::{bool_expr::BoolExpr, expr::RawExpr, for_loop_expr::ForLoopExpr, iter_expr::IterRange},
     stmt::{
         assign_stmt::AssignStmt,
         block_stmt::BlockStmt,
@@ -14,7 +14,7 @@ use crate::program::{
         stmt::{Stmt, StmtVariants},
     },
     struct_template::StructTemplate,
-    types::{BorrowStatus, BorrowTypeID, TypeID},
+    types::{BorrowStatus, BorrowTypeID, IntTypeID, TypeID},
     var::Var,
 };
 
@@ -25,8 +25,8 @@ use super::{
     struct_gen::{self, StructTable},
 };
 
-const MAX_STMTS_IN_BLOCK: u8 = 12;
-const MAX_CONDITIONAL_BRANCHES: u8 = 4;
+const MAX_STMTS_IN_BLOCK: u8 = 6;
+const MAX_CONDITIONAL_BRANCHES: u8 = 2;
 pub const MAX_STMT_DEPTH: u32 = 2; // Only refers to conditional statements
 
 pub struct StmtGenerator<'a> {
@@ -126,6 +126,9 @@ impl<'a> StmtGenerator<'a> {
             StmtVariants::ConditionalStatement if depth > 0 => {
                 self.conditional_stmt(scope, depth, rng).as_stmt()
             }
+            StmtVariants::LoopStatement if depth > 0 => {
+                self.for_loop_stmt(scope, depth, rng).as_stmt()
+            }
             StmtVariants::LetStatement | _ => self.let_stmt(scope, rng).as_stmt(),
         }
     }
@@ -169,34 +172,62 @@ impl<'a> StmtGenerator<'a> {
             scope_entry = ScopeEntry::Var(var.clone());
         }
 
-        scope.borrow_mut().add(var.get_name(), Rc::new(scope_entry));
+        scope
+            .borrow_mut()
+            .insert(&var.get_name(), Rc::new(scope_entry));
         LetStmt::new(var, expr)
+    }
+
+    pub fn for_loop_stmt<R: Rng>(
+        &mut self,
+        scope: Rc<RefCell<Scope>>,
+        depth: u32,
+        rng: &mut R,
+    ) -> ExprStmt {
+        let rand_int_type: IntTypeID = rand::random();
+        let rand_type = rand_int_type.as_type();
+
+        let generator = ExprGenerator::new(
+            self.struct_table,
+            Rc::clone(&scope),
+            rand_type.clone(),
+            BorrowTypeID::None,
+            expr_gen::MAX_EXPR_DEPTH,
+        );
+
+        let lower_range = generator.arith_expr(expr_gen::MAX_EXPR_DEPTH, rng);
+        let upper_range = generator.arith_expr(expr_gen::MAX_EXPR_DEPTH, rng);
+        let iter_expr = IterRange::new(rand_int_type, lower_range, upper_range).as_iter_expr();
+
+        let var = Var::new(rand_type.clone(), self.var_name_gen.next().unwrap(), false);
+
+        let child_scope = Rc::new(RefCell::new(Scope::new_from_parent(scope)));
+        let block_stmt = self.block_stmt(child_scope, depth - 1, rng);
+        let for_loop_expr = ForLoopExpr::new(rand_type, var, iter_expr, block_stmt);
+
+        ExprStmt::new(for_loop_expr.as_expr())
     }
 
     // TODO: Use the borrow context struct to manage borrows
     pub fn assign_stmt<R: Rng>(&mut self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> AssignStmt {
         // TODO: If this LHS is a field of a struct, then the entire struct should be considered borrowed
         // Had the issue of: let mut a = struct -> a.field = function(a, other_args), a cannot be function arg
-        let mut var_choice = scope.borrow().rand_mut(rng);
+        let borrower = String::from("temp_mut_borrow");
+        let mutables = scope
+            .borrow()
+            .filter_with_closure(|scope_entry, borrow_status| {
+                scope_entry.is_mut() || borrow_status == BorrowStatus::MutBorrowed
+            });
 
-        let mut i = 0;
-        // Disable doing assignment to the global struct since we may miss out on errors
-        while var_choice.1.get_type()
-            == TypeID::StructType(struct_gen::GLOBAL_STRUCT_NAME.to_string())
-        {
-            var_choice = scope.borrow().rand_mut(rng);
-            i += 1;
-            if i > 100 {
-                println!("No other mutables found, must assign to global struct");
-                break;
-            }
-        }
-        let (var_name, scope_entry, prev_borrow_status) = var_choice;
+        let var_choice = match mutables.choose(rng) {
+            Some(choice) => choice,
+            None => panic!("No mutable variables to assign to"),
+        };
 
-        // TODO: Test this in playground
-        scope
-            .borrow_mut()
-            .set_borrow_status(var_name.clone(), BorrowStatus::MutBorrowed);
+        let (var_name, scope_entry, _) = var_choice;
+
+        // TODO: Prevent a mut borrow override using context variable
+        scope.borrow_mut().mut_borrow_entry(&borrower, &var_name);
 
         let type_id = scope_entry.get_type();
 
@@ -213,11 +244,9 @@ impl<'a> StmtGenerator<'a> {
         let expr = expr_generator.expr(rng);
 
         // Return borrow status to previous state (since RHS expression is self contained)
-        scope
-            .borrow_mut()
-            .set_borrow_status(var_name.clone(), prev_borrow_status);
+        scope.borrow_mut().remove_entry(&borrower);
 
-        let left_var = Var::new(scope_entry.get_type(), var_name, true);
+        let left_var = Var::new(scope_entry.get_type(), var_name.clone(), true);
 
         // If we are assigning directly onto a mutable reference, we need to dereference it
         AssignStmt::new(
@@ -298,8 +327,8 @@ impl<'a> StmtGenerator<'a> {
 
         let global_struct_type = scope_entry.get_type();
 
-        scope.borrow_mut().add(
-            struct_gen::GLOBAL_STRUCT_VAR_NAME.to_string(),
+        scope.borrow_mut().insert(
+            &struct_gen::GLOBAL_STRUCT_VAR_NAME.to_string(),
             Rc::new(scope_entry),
         );
 

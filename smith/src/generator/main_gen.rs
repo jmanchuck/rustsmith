@@ -10,8 +10,8 @@ use super::struct_gen::StructTable;
 
 pub const MAX_STATICS: u32 = 2;
 pub const MAX_STRUCTS: u32 = 2;
-pub const MAX_FUNCS: u32 = 8;
-pub const MAX_FUNC_PARAMS: u32 = 8;
+pub const MAX_FUNCS: u32 = 4;
+pub const MAX_FUNC_PARAMS: u32 = 4;
 
 pub fn gen_main<R: Rng>(rng: &mut R) -> String {
     let mut func_count: u8 = 0;
@@ -42,8 +42,8 @@ pub fn gen_main<R: Rng>(rng: &mut R) -> String {
 
         let function = func_gen.gen_func(Rc::clone(&current_scope), rng, is_main);
 
-        current_scope.borrow_mut().add(
-            function.get_name(),
+        current_scope.borrow_mut().insert(
+            &function.get_name(),
             Rc::new(
                 FuncScopeEntry::new(function.get_return_type(), function.get_template())
                     .as_scope_entry(),

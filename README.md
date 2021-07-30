@@ -2,6 +2,10 @@
 
 A Rust compiler fuzzer
 
+### Version 0.1.2
+
+- Better borrow rules
+
 ### Version 0.1.1
 
 - Added the following language constructs -

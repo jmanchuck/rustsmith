@@ -1,5 +1,6 @@
 mod borrow_scope;
 mod expr_gen;
+pub mod filters;
 mod func_gen;
 pub mod main_gen;
 mod name_gen;

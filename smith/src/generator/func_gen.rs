@@ -96,11 +96,9 @@ impl<'a> FuncGenerator<'a> {
 
             param_list.push(param.clone());
 
-            scope.borrow_mut().add_with_borrow_type(
-                param.get_name(),
-                Rc::new(scope_entry),
-                param.get_borrow_type().as_borrow_status(),
-            );
+            scope
+                .borrow_mut()
+                .insert(&param.get_name(), Rc::new(scope_entry));
         }
 
         param_list
