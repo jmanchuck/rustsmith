@@ -2,24 +2,12 @@
 
 A Rust compiler fuzzer
 
-### Version 0.1.1
+# Useful Commands
 
-- Added the following language constructs -
-  - Boolean expressions
-  - Conditional statements
-  - Simple borrow expressions
-- Removed dependency on cargo nightly
-- Simple borrow rules implemented
-  - Cannot borrow a mutably borrowed variable
-  - Cannot mutabaly borrow an immutably borrowed variable
-  - Move not allowed on borrowed variables
+## Generating LLVMIR, Assembly and Rust MIR
 
-### Version 0.1.0
+`$ cargo rustc --bin [BIN_NAME] -- --emit=llvm-ir,asm,mir`
 
-- Generates very simple Rust programs, currently covering the following language constructs -
-  - Arithmetic expressions
-  - Function calls
-  - Structs
-  - Basic let statements and assignment statements
-- Some automation for generating, building, running and differential testing generated programs
-- Uses safe math wrapped functions to prevent overflow and illegal integer arithmetic
+Output will be in `target/debug/deps` or `target/release/deps` depending on opt level or opt profile.
+
+####

@@ -1,213 +1,15 @@
-use rand::prelude::SliceRandom;
-use rand::Rng;
+use std::{cell::RefCell, collections::BTreeMap, fmt, rc::Rc};
 
-use crate::program::function::{FunctionTemplate, Param};
-use crate::program::struct_template::StructTemplate;
-use crate::program::types::{BorrowStatus, BorrowTypeID, TypeID};
-use crate::program::var::Var;
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::fmt;
-use std::rc::Rc;
+use rand::{prelude::SliceRandom, Rng};
 
-#[derive(Debug)]
-pub enum ScopeEntry {
-    Var(VarScopeEntry),
-    Func(FuncScopeEntry),
-    Struct(StructScopeEntry),
-}
+use crate::program::types::{BorrowStatus, BorrowTypeID};
 
-impl ScopeEntry {
-    pub fn get_type(&self) -> TypeID {
-        match self {
-            Self::Var(entry) => entry.get_type(),
-            Self::Func(entry) => entry.get_type(),
-            Self::Struct(entry) => entry.get_type(),
-        }
-    }
-
-    pub fn get_borrow_type(&self) -> BorrowTypeID {
-        match self {
-            Self::Var(entry) => entry.get_borrow_type(),
-            Self::Func(_) => BorrowTypeID::None,
-            Self::Struct(entry) => entry.get_borrow_type(),
-        }
-    }
-
-    pub fn is_type(&self, type_id: TypeID) -> bool {
-        self.get_type() == type_id
-    }
-
-    pub fn is_borrow_type(&self, borrow_type_id: BorrowTypeID) -> bool {
-        self.get_borrow_type() == borrow_type_id
-    }
-
-    pub fn is_mut(&self) -> bool {
-        match self {
-            Self::Var(var) => var.is_mut(),
-            Self::Struct(s) => s.is_mut(),
-            _ => false,
-        }
-    }
-
-    pub fn is_var(&self) -> bool {
-        match self {
-            Self::Var(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_func(&self) -> bool {
-        match self {
-            Self::Func(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_struct(&self) -> bool {
-        match self {
-            Self::Struct(_) => true,
-            _ => false,
-        }
-    }
-}
-
-pub type VarScopeEntry = Var;
-impl VarScopeEntry {
-    pub fn as_scope_entry(self) -> ScopeEntry {
-        ScopeEntry::Var(self)
-    }
-}
-
-#[derive(Debug)]
-pub struct FuncScopeEntry {
-    type_id: TypeID,
-    function_template: FunctionTemplate,
-}
-
-impl FuncScopeEntry {
-    pub fn new(type_id: TypeID, function_template: FunctionTemplate) -> Self {
-        FuncScopeEntry {
-            type_id,
-            function_template,
-        }
-    }
-
-    pub fn get_type(&self) -> TypeID {
-        self.type_id.clone()
-    }
-
-    pub fn get_template(&self) -> FunctionTemplate {
-        self.function_template.clone()
-    }
-
-    pub fn as_scope_entry(self) -> ScopeEntry {
-        ScopeEntry::Func(self)
-    }
-}
-
-pub struct StructScopeEntry {
-    type_id: TypeID,
-    borrow_type: BorrowTypeID,
-    struct_template: StructTemplate,
-    fields_map: BTreeMap<String, VarScopeEntry>,
-    is_mut: bool,
-}
-
-impl StructScopeEntry {
-    pub fn new(
-        struct_var_name: String,
-        borrow_type: BorrowTypeID,
-        struct_template: StructTemplate,
-        flattened_fields: Vec<(String, TypeID)>,
-        is_mut: bool,
-    ) -> Self {
-        let mut fields_map: BTreeMap<String, VarScopeEntry> = BTreeMap::new();
-        for (field_name, field_type) in flattened_fields {
-            let mapped_name = format!("{}{}", struct_var_name.clone(), field_name.clone());
-            let var_scope_entry = VarScopeEntry::new(field_type, mapped_name.clone(), is_mut);
-            fields_map.insert(mapped_name, var_scope_entry);
-        }
-
-        StructScopeEntry {
-            type_id: struct_template.get_type(),
-            borrow_type,
-            struct_template,
-            fields_map,
-            is_mut,
-        }
-    }
-
-    pub fn from_param(
-        param: &Param,
-        struct_template: StructTemplate,
-        flattened_fields: Vec<(String, TypeID)>,
-    ) -> Self {
-        // Mutable reference as param means that its fields can be assigned to
-        let is_mut_ref = param.get_borrow_type() == BorrowTypeID::MutRef;
-
-        let mut fields_map: BTreeMap<String, VarScopeEntry> = BTreeMap::new();
-        for (field_name, field_type) in flattened_fields {
-            let mapped_name = format!("{}{}", param.get_name(), field_name.clone());
-            let var_scope_entry = VarScopeEntry::new(field_type, mapped_name.clone(), is_mut_ref);
-            fields_map.insert(mapped_name, var_scope_entry);
-        }
-
-        // TODO: Allow mutable params
-        StructScopeEntry {
-            type_id: param.get_type(),
-            borrow_type: param.get_borrow_type(),
-            struct_template,
-            fields_map,
-            is_mut: false,
-        }
-    }
-
-    pub fn is_mut(&self) -> bool {
-        self.is_mut
-    }
-
-    pub fn get_type(&self) -> TypeID {
-        self.type_id.clone()
-    }
-
-    pub fn get_borrow_type(&self) -> BorrowTypeID {
-        self.borrow_type.clone()
-    }
-
-    pub fn get_field_entries(&self) -> BTreeMap<String, Rc<ScopeEntry>> {
-        let mut result: BTreeMap<String, Rc<ScopeEntry>> = BTreeMap::new();
-        for (field_name, var_scope_entry) in &self.fields_map {
-            result.insert(
-                field_name.clone(),
-                Rc::new(ScopeEntry::Var(var_scope_entry.clone())),
-            );
-        }
-
-        result
-    }
-
-    pub fn remove_field(&mut self, field_name: String) {
-        self.fields_map.remove(&field_name);
-    }
-
-    pub fn as_scope_entry(self) -> ScopeEntry {
-        ScopeEntry::Struct(self)
-    }
-}
-
-impl fmt::Debug for StructScopeEntry {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("StructScope")
-            .field("Template", &self.struct_template)
-            .field("Mutable", &self.is_mut)
-            .finish()
-    }
-}
+use super::{borrow_scope::BorrowContext, scope_entry::ScopeEntry};
 
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
-    entries: BTreeMap<String, (Rc<ScopeEntry>, BorrowStatus)>,
+    entries: BTreeMap<String, Rc<ScopeEntry>>,
+    borrows: BTreeMap<String, BorrowContext>,
 }
 
 impl Scope {
@@ -215,184 +17,394 @@ impl Scope {
         Scope {
             parent: None,
             entries: BTreeMap::new(),
+            borrows: BTreeMap::new(),
         }
     }
 
     pub fn new_from_parent(parent: Rc<RefCell<Scope>>) -> Self {
+        let borrows = parent.borrow().borrows.clone();
         Scope {
             parent: Some(parent),
             entries: BTreeMap::new(),
+            borrows,
         }
     }
 
-    pub fn add(&mut self, name: String, entry: Rc<ScopeEntry>) {
-        self.add_with_borrow_type(name, entry, BorrowStatus::None);
+    pub fn get_parent(&self) -> Option<Rc<RefCell<Scope>>> {
+        self.parent.clone()
     }
 
-    pub fn add_with_borrow_type(
+    pub fn insert(&mut self, entry_name: &String, scope_entry: ScopeEntry) {
+        self.add_entry(entry_name.clone(), scope_entry, None);
+    }
+
+    pub fn insert_borrow(
         &mut self,
-        name: String,
-        entry: Rc<ScopeEntry>,
-        borrow_status: BorrowStatus,
+        entry_name: &String,
+        scope_entry: ScopeEntry,
+        borrow_source: &String,
     ) {
-        self.entries.insert(name, (entry, borrow_status));
+        self.add_entry(entry_name.clone(), scope_entry, Some(borrow_source.clone()));
+        self.borrow_entry(entry_name, borrow_source);
     }
 
-    pub fn lookup(&self, name: String) -> Option<(Rc<ScopeEntry>, BorrowStatus)> {
-        if self.entries.contains_key(&name) {
-            return Some(self.entries.get(&name).unwrap().clone());
+    pub fn insert_mut_borrow(
+        &mut self,
+        entry_name: &String,
+        scope_entry: ScopeEntry,
+        borrow_source: &String,
+    ) {
+        self.add_entry(entry_name.clone(), scope_entry, Some(borrow_source.clone()));
+        self.mut_borrow_entry(entry_name, borrow_source);
+    }
+
+    fn add_entry(
+        &mut self,
+        entry_name: String,
+        scope_entry: ScopeEntry,
+        borrow_source: Option<String>,
+    ) {
+        if let ScopeEntry::Struct(struct_scope_entry) = &scope_entry {
+            for (field_name, _) in struct_scope_entry.get_field_entries() {
+                self.borrows.insert(
+                    format!("{}.{}", entry_name.clone(), field_name),
+                    BorrowContext::new(borrow_source.clone()),
+                );
+            }
         }
-        match &self.parent {
-            Some(parent_scope) => parent_scope.borrow().lookup(name),
+        self.entries
+            .insert(entry_name.clone(), Rc::new(scope_entry));
+        self.borrows
+            .insert(entry_name.clone(), BorrowContext::new(borrow_source));
+    }
+
+    pub fn borrow_struct_field_entry(&mut self, borrower: &String, borrow_source: &String) {
+        let borrow_source = String::from(borrow_source);
+
+        // Splits a.field1.field2 to [a, field1, field2]
+        let separated: Vec<&str> = borrow_source.split('.').collect();
+
+        // Borrows a, a.field1, a.field1.field2
+        for i in 0..separated.len() {
+            let entry_to_borrow = separated[..=i].join(".");
+            self.borrow_entry_raw(borrower, &entry_to_borrow);
+        }
+
+        // If a.field1.field2 is a struct, borrow all its child fields
+        match self.lookup(&borrow_source) {
+            Some((scope_entry, _)) => {
+                if let ScopeEntry::Struct(struct_scope_entry) = scope_entry.as_ref() {
+                    for (field_name, _) in struct_scope_entry.get_field_entries() {
+                        let full_name = format!("{}.{}", borrow_source, field_name);
+                        self.borrow_entry_raw(borrower, &full_name);
+                    }
+                }
+            }
+            None => (),
+        }
+    }
+
+    pub fn borrow_entry(&mut self, borrower: &String, borrow_source: &String) {
+        if borrow_source.contains('.') {
+            self.borrow_struct_field_entry(borrower, borrow_source);
+        } else {
+            self.borrow_entry_raw(borrower, borrow_source);
+        }
+    }
+
+    // Sorry I couldn't think of a better name pt. 1
+    fn borrow_entry_raw(&mut self, borrower: &String, borrow_source: &String) {
+        if !self.borrows.contains_key(borrow_source) {
+            panic!(
+                "Could not find borrow source in borrow scope: {}",
+                borrow_source
+            );
+        }
+        let borrow_source_context = self.borrows.get_mut(borrow_source).unwrap();
+        borrow_source_context.borrow(&borrower);
+
+        match borrow_source_context.get_mut_borrow() {
+            Some(borrower) => self.remove_entry(&borrower),
+            None => (),
+        }
+    }
+
+    pub fn mut_borrow_entry(&mut self, borrower: &String, borrow_source: &String) {
+        if borrow_source.contains('.') {
+            self.mut_borrow_struct_field_entry(borrower, borrow_source);
+        } else {
+            self.mut_borrow_entry_raw(borrower, borrow_source);
+        }
+    }
+
+    pub fn mut_borrow_struct_field_entry(&mut self, borrower: &String, borrow_source: &String) {
+        let borrow_source = String::from(borrow_source);
+
+        // Splits a.field1.field2 to [a, field1, field2]
+        let separated: Vec<&str> = borrow_source.split('.').collect();
+
+        // Borrows a, a.field1, a.field1.field2
+        for i in 0..separated.len() {
+            let entry_to_borrow = separated[..=i].join(".");
+            self.mut_borrow_entry_raw(borrower, &entry_to_borrow);
+        }
+
+        // If a.field1.field2 is a struct, borrow all its child fields
+        match self.lookup(&borrow_source) {
+            Some((scope_entry, _)) => {
+                if let ScopeEntry::Struct(struct_scope_entry) = scope_entry.as_ref() {
+                    for (field_name, _) in struct_scope_entry.get_field_entries() {
+                        let full_name = format!("{}.{}", borrow_source, field_name);
+                        self.mut_borrow_entry_raw(borrower, &full_name);
+                    }
+                }
+            }
+            None => (),
+        }
+    }
+
+    // Sorry I couldn't think of a better name pt. 2
+    fn mut_borrow_entry_raw(&mut self, borrower: &String, borrow_source: &String) {
+        if !self.borrows.contains_key(borrow_source) {
+            panic!(
+                "Could not find borrow source in borrow scope: {}",
+                borrow_source
+            );
+        }
+        // Delete previous immutable borrows
+        let prev_borrows = self.borrows.get(borrow_source).unwrap().get_borrows();
+        for borrow in prev_borrows {
+            self.remove_entry(&borrow);
+        }
+
+        // Mutably borrow, deleting previous mutable borrow if exists
+        let borrow_source_context = self.borrows.get_mut(borrow_source).unwrap();
+        let result = borrow_source_context.mut_borrow(&borrower);
+
+        // Delete previous mut borrow
+        match result {
+            Some(prev_mut_borrow) => self.remove_entry(&prev_mut_borrow),
+            _ => (),
+        }
+    }
+    pub fn borrow_count(&self, entry_name: &String) -> usize {
+        match self.borrows.get(entry_name) {
+            Some(borrow_context) => borrow_context.get_borrows().len(),
+            _ => 0,
+        }
+    }
+
+    pub fn is_mut_borrowed(&self, entry_name: &String) -> bool {
+        match self.borrows.get(entry_name) {
+            Some(borrow_context) => borrow_context.is_mut_borrowed(),
+            _ => false,
+        }
+    }
+
+    // Corresponds to a move or remove from scope
+    pub fn remove_entry(&mut self, entry_name: &String) {
+        if entry_name.contains('.') {
+            let parent_struct_var_name = string_before_first_period(entry_name);
+            self.remove_struct_scope_entry(&parent_struct_var_name);
+        } else {
+            self.remove_var_scope_entry(entry_name);
+        }
+    }
+
+    pub fn lookup(&self, entry_name: &String) -> Option<(Rc<ScopeEntry>, BorrowStatus)> {
+        match self.get_all_entries().get(entry_name) {
+            Some(entry) => Some(entry.clone()),
             None => None,
         }
     }
 
-    pub fn remove_entry(&mut self, mut name: String) {
-        // Remove the entire struct entry
-        if name.contains('.') {
-            name = name.split_at(name.find('.').unwrap()).0.to_string();
+    fn get_borrow_source(&self, entry_name: &String) -> Option<String> {
+        let result = self.borrows.get(entry_name);
+
+        match result {
+            Some(borrow_context) => borrow_context.get_borrow_source(),
+            _ => None,
+        }
+    }
+
+    fn remove_var_scope_entry(&mut self, entry_name: &String) {
+        self.remove_scope_entry(entry_name);
+
+        let borrow_source = self.get_borrow_source(entry_name);
+
+        match borrow_source {
+            Some(borrow_source) => self.remove_borrow(entry_name, &borrow_source),
+            _ => (),
+        }
+    }
+
+    // Removes all fields from borrow scope and from its borrow sources
+    // Removes the struct itself at the end
+    fn remove_struct_scope_entry(&mut self, entry_name: &String) {
+        let entry = self.lookup(entry_name);
+
+        if let Some((scope_entry, _)) = entry {
+            if let ScopeEntry::Struct(struct_scope_entry) = scope_entry.as_ref() {
+                for (field_name, _) in struct_scope_entry.get_field_entries() {
+                    let full_field_name = format!("{}.{}", entry_name, field_name);
+                    self.remove_scope_entry(&full_field_name);
+
+                    let borrow_source = self.get_borrow_source(&full_field_name);
+
+                    match borrow_source {
+                        Some(borrow_source) => self.remove_borrow(&full_field_name, &borrow_source),
+                        _ => (),
+                    }
+                }
+            }
         }
 
-        if self.entries.contains_key(&name) {
-            self.entries.remove(&name);
+        self.remove_var_scope_entry(entry_name);
+    }
+
+    fn remove_scope_entry(&mut self, entry_name: &String) {
+        if self.entries.contains_key(entry_name) {
+            self.entries.remove(entry_name);
         } else {
             match &self.parent {
-                Some(parent_scope) => parent_scope.borrow_mut().remove_entry(name),
-                None => (),
+                Some(parent_scope) => parent_scope.borrow_mut().remove_scope_entry(entry_name),
+                _ => (),
             }
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
+    // Removes a borrow from some borrow source
+    // i.e. if a is borrowed by b, remove(b, a) will delete the borrow
+    fn remove_borrow(&mut self, entry_name: &String, borrow_source: &String) {
+        let borrow_source_context = self.borrows.get_mut(borrow_source);
 
-    pub fn set_borrow_status(&mut self, mut name: String, borrow_status: BorrowStatus) {
-        // Sets the entire struct entry borrow status
-        if name.contains('.') {
-            name = name.split_at(name.find('.').unwrap()).0.to_string();
-        }
-        if self.entries.contains_key(&name) {
-            self.entries.get_mut(&name).unwrap().1 = borrow_status;
-        } else {
-            match &self.parent {
+        match borrow_source_context {
+            Some(borrow_context) => borrow_context.remove_borrow(entry_name),
+            _ => match &self.parent {
                 Some(parent_scope) => parent_scope
                     .borrow_mut()
-                    .set_borrow_status(name, borrow_status),
-                None => (),
-            }
+                    .remove_borrow(entry_name, borrow_source),
+                _ => (),
+            },
         }
-    }
-
-    pub fn filter_by_type(&self, type_id: TypeID) -> Vec<(String, Rc<ScopeEntry>)> {
-        let filter = |scope_entry: &ScopeEntry, _| -> bool { scope_entry.is_type(type_id.clone()) };
-
-        self.filter_with_closure(filter)
-            .into_iter()
-            .map(|(x, y, _)| (x, y))
-            .collect()
-    }
-
-    pub fn filter_with_closure<T>(&self, filter: T) -> Vec<(String, Rc<ScopeEntry>, BorrowStatus)>
-    where
-        T: Fn(&ScopeEntry, BorrowStatus) -> bool,
-    {
-        let mut result: Vec<(String, Rc<ScopeEntry>, BorrowStatus)> = Vec::new();
-        for (entry_name, (entry, borrow_status)) in self.get_all_entries() {
-            if filter(entry.as_ref(), borrow_status) {
-                result.push((entry_name, Rc::clone(&entry), borrow_status));
-            }
-        }
-
-        result
     }
 
     pub fn contains_filter<T>(&self, filter: T) -> bool
     where
-        T: Fn(&ScopeEntry, BorrowStatus) -> bool,
+        T: Fn(Rc<ScopeEntry>, BorrowStatus) -> bool,
     {
-        for (_, (entry, borrow_status)) in self.get_all_entries() {
-            if filter(entry.as_ref(), borrow_status) {
-                return true;
+        self.filter_with_closure(filter).len() > 0
+    }
+
+    pub fn filter_with_closure<T>(&self, filter: T) -> Vec<(String, (Rc<ScopeEntry>, BorrowStatus))>
+    where
+        T: Fn(Rc<ScopeEntry>, BorrowStatus) -> bool,
+    {
+        let mut result: Vec<(String, (Rc<ScopeEntry>, BorrowStatus))> = Vec::new();
+        for (entry_name, (scope_entry, borrow_status)) in self.get_all_entries() {
+            if filter(scope_entry.clone(), borrow_status) {
+                result.push((entry_name, (scope_entry, borrow_status)));
             }
         }
-        return false;
-    }
-
-    // Quicker than getting all entries since we check the scope stack from top to bottom
-    pub fn contains_type(&self, type_id: TypeID) -> bool {
-        for (_, (entry, _)) in self.entries.iter() {
-            if entry.is_type(type_id.clone()) {
-                return true;
-            }
-        }
-        if let Some(parent) = &self.parent {
-            return parent.borrow().contains_type(type_id);
-        }
-        return false;
-    }
-
-    pub fn contains_var_type(&self, type_id: TypeID) -> bool {
-        for (_, entry) in self.filter_by_type(type_id).iter() {
-            if let ScopeEntry::Var(_) = entry.as_ref() {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    pub fn contains_function_type(&self, type_id: TypeID) -> bool {
-        for (_, entry) in self.filter_by_type(type_id).iter() {
-            if let ScopeEntry::Func(_) = entry.as_ref() {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    pub fn rand_mut<R: Rng>(&self, rng: &mut R) -> (String, Rc<ScopeEntry>, BorrowStatus) {
-        let filter = |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
-            scope_entry.is_mut() && (borrow_status != BorrowStatus::Borrowed)
-        };
-        let mutables = self.filter_with_closure(filter);
-
-        mutables.choose(rng).unwrap().clone()
-    }
-
-    pub fn mut_count(&self) -> usize {
-        self.filter_with_closure(
-            |scope_entry: &ScopeEntry, borrow_status: BorrowStatus| -> bool {
-                scope_entry.is_mut() && borrow_status != BorrowStatus::Borrowed
-            },
-        )
-        .len()
-    }
-
-    pub fn get_entries(&self) -> BTreeMap<String, (Rc<ScopeEntry>, BorrowStatus)> {
-        self.entries.clone()
-    }
-
-    // Should all be unique names since we start from current scope and work up, only adding new names (i.e. nearest name in scope is seen)
-    pub fn get_all_entries(&self) -> BTreeMap<String, (Rc<ScopeEntry>, BorrowStatus)> {
-        let mut result: BTreeMap<String, (Rc<ScopeEntry>, BorrowStatus)> = BTreeMap::new();
-        self.get_entries_r(&mut result);
 
         result
     }
 
-    // Recursively gets entries
-    fn get_entries_r(&self, result: &mut BTreeMap<String, (Rc<ScopeEntry>, BorrowStatus)>) {
-        for (entry_name, (scope_entry, borrow_status)) in self.get_entries() {
+    pub fn contains_filter_full<T>(&self, filter: T) -> bool
+    where
+        T: Fn(&String, Rc<ScopeEntry>, BorrowStatus) -> bool,
+    {
+        self.filter_with_closure_full(filter).len() > 0
+    }
+
+    pub fn filter_with_closure_full<T>(
+        &self,
+        filter: T,
+    ) -> Vec<(String, (Rc<ScopeEntry>, BorrowStatus))>
+    where
+        T: Fn(&String, Rc<ScopeEntry>, BorrowStatus) -> bool,
+    {
+        let mut result: Vec<(String, (Rc<ScopeEntry>, BorrowStatus))> = Vec::new();
+        for (entry_name, (scope_entry, borrow_status)) in self.get_all_entries() {
+            if filter(&entry_name, scope_entry.clone(), borrow_status) {
+                result.push((entry_name, (scope_entry, borrow_status)));
+            }
+        }
+
+        result
+    }
+    pub fn can_move_entry(&self, entry_name: &String) -> bool {
+        match self.lookup(entry_name) {
+            Some((scope_entry, borrow_status)) => {
+                let parent_entry_name = string_before_first_period(entry_name);
+                if !parent_entry_name.eq(entry_name) {
+                    self.can_move_entry(&parent_entry_name)
+                } else {
+                    scope_entry.is_borrow_type(BorrowTypeID::None)
+                        && borrow_status == BorrowStatus::None
+                }
+            }
+            None => false,
+        }
+    }
+
+    pub fn rand_mut<R: Rng>(
+        &self,
+        rng: &mut R,
+    ) -> Result<(String, (Rc<ScopeEntry>, BorrowStatus)), ()> {
+        let filter = |scope_entry: Rc<ScopeEntry>, borrow_status: BorrowStatus| -> bool {
+            (scope_entry.is_mut() && (borrow_status != BorrowStatus::Borrowed))
+                || borrow_status == BorrowStatus::MutBorrowed
+        };
+        let mutables = self.filter_with_closure(filter);
+
+        match mutables.choose(rng) {
+            Some(choice) => Ok(choice.clone()),
+            None => Err(()),
+        }
+    }
+
+    pub fn mut_count(&self) -> usize {
+        self.filter_with_closure(|scope_entry, _| scope_entry.is_mut())
+            .len()
+    }
+
+    // Should all be unique names since we start from current scope and work up, only adding new names (i.e. nearest name in scope is seen)
+    pub fn get_all_entries(&self) -> BTreeMap<String, (Rc<ScopeEntry>, BorrowStatus)> {
+        let mut all_entries: BTreeMap<String, Rc<ScopeEntry>> = BTreeMap::new();
+        self.get_entries_r(&mut all_entries);
+
+        let mut result: BTreeMap<String, (Rc<ScopeEntry>, BorrowStatus)> = BTreeMap::new();
+        for (entry_name, scope_entry) in all_entries {
+            let borrow_status = match self.borrows.get(&entry_name) {
+                Some(borrow_context) => borrow_context.get_borrow_status(),
+                _ => panic!("Could not find borrow context for variable"),
+            };
+
+            result.insert(entry_name, (Rc::clone(&scope_entry), borrow_status));
+        }
+
+        result
+    }
+
+    fn get_entries(&self) -> BTreeMap<String, Rc<ScopeEntry>> {
+        self.entries.clone()
+    }
+
+    // Recursively gets entries, flatten struct if we can
+    fn get_entries_r(&self, result: &mut BTreeMap<String, Rc<ScopeEntry>>) {
+        for (entry_name, scope_entry) in self.get_entries() {
             // If variable name is not in scope
             if !result.contains_key(&entry_name) {
-                result.insert(entry_name.clone(), (Rc::clone(&scope_entry), borrow_status));
+                result.insert(entry_name.clone(), Rc::clone(&scope_entry));
 
-                // Flattening done here to avoid name overlap
-                // i.e. let a = struct -> let a = i32 -> a.field is no longer valid
+                // Flattening done here
                 if let ScopeEntry::Struct(struct_scope_entry) = scope_entry.as_ref() {
-                    for (entry_name, scope_entry) in struct_scope_entry.get_field_entries() {
-                        result.insert(entry_name.clone(), (Rc::clone(&scope_entry), borrow_status));
+                    for (field_name, scope_entry) in struct_scope_entry.get_field_entries() {
+                        result.insert(
+                            format!("{}.{}", entry_name, field_name),
+                            scope_entry.clone(),
+                        );
                     }
                 }
             }
@@ -402,6 +414,16 @@ impl Scope {
             None => (),
         }
     }
+}
+
+fn string_before_first_period(s: &String) -> String {
+    let s = s.to_string();
+    let period_idx = match s.find('.') {
+        Some(idx) => idx,
+        None => s.len(),
+    };
+
+    s[..period_idx].to_string()
 }
 
 impl fmt::Debug for Scope {
@@ -414,7 +436,17 @@ impl fmt::Debug for Scope {
 
 #[cfg(test)]
 mod test {
-    use crate::program::types::IntTypeID;
+    use crate::{
+        generator::{
+            scope_entry::{StructScopeEntry, VarScopeEntry},
+            struct_gen::StructTable,
+        },
+        program::{
+            struct_template::StructTemplate,
+            types::{BorrowTypeID, IntTypeID, TypeID},
+            var::Var,
+        },
+    };
 
     use super::*;
     #[test]
@@ -423,11 +455,9 @@ mod test {
         let num_parent_scope = 5;
 
         for i in 0..num_parent_scope {
-            scope.borrow_mut().add(
-                i.to_string(),
-                Rc::new(
-                    VarScopeEntry::new(TypeID::NullType, String::new(), false).as_scope_entry(),
-                ),
+            scope.borrow_mut().insert(
+                &i.to_string(),
+                VarScopeEntry::new(TypeID::NullType, String::new(), false).as_scope_entry(),
             );
         }
 
@@ -435,11 +465,9 @@ mod test {
         let num_child_scope = 10;
 
         for i in 0..num_child_scope {
-            child_scope.add(
-                (i + num_parent_scope).to_string(), // avoid variable name overlap
-                Rc::new(
-                    VarScopeEntry::new(TypeID::NullType, String::new(), false).as_scope_entry(),
-                ),
+            child_scope.insert(
+                &(i + num_parent_scope).to_string(), // avoid variable name overlap
+                VarScopeEntry::new(TypeID::NullType, String::new(), false).as_scope_entry(),
             );
         }
 
@@ -448,208 +476,196 @@ mod test {
             num_parent_scope + num_child_scope
         );
 
-        assert_eq!(scope.borrow_mut().get_all_entries().len(), num_parent_scope);
-    }
-    #[test]
-    fn uses_top_scope_variables_for_duplicate_variable_names() {
-        let scope = Rc::new(RefCell::new(Scope::new()));
-        let num_parent_scope = 5;
-
-        for i in 0..num_parent_scope {
-            scope.borrow_mut().add(
-                i.to_string(),
-                Rc::new(
-                    VarScopeEntry::new(TypeID::NullType, String::new(), false).as_scope_entry(),
-                ),
-            );
-        }
-
-        let mut child_scope = Scope::new_from_parent(Rc::clone(&scope));
-        let num_child_scope = 3;
-
-        for i in 0..num_child_scope {
-            child_scope.add(
-                i.to_string(), // new scope should take up 3 names
-                Rc::new(
-                    VarScopeEntry::new(TypeID::NullType, String::new(), false).as_scope_entry(),
-                ),
-            );
-        }
-
-        assert_eq!(child_scope.get_all_entries().len(), num_parent_scope);
-        assert_eq!(scope.borrow_mut().get_all_entries().len(), num_parent_scope);
+        assert_eq!(scope.borrow().get_all_entries().len(), num_parent_scope);
     }
 
     #[test]
-    fn checks_if_contains_type_correctly() {
-        let scope = Rc::new(RefCell::new(Scope::new()));
+    /*
+        struct B -> {field1: C, field2: i32}
+        struct C -> {field1: i32}
 
-        let type_id = IntTypeID::U8.as_type();
-        let var_name = String::from("a");
-
-        scope.borrow_mut().add(
-            var_name.clone(),
-            Rc::new(VarScopeEntry::new(type_id.clone(), var_name, false).as_scope_entry()),
-        );
-
-        assert!(scope.borrow().contains_type(type_id.clone()));
-
-        let child_scope = Scope::new_from_parent(Rc::clone(&scope));
-
-        assert!(child_scope.contains_type(type_id));
-    }
-
-    #[test]
-    fn filters_by_type_correctly() {
-        let mut scope = Scope::new();
-        let type_id = TypeID::StructType(String::from("StructA"));
-
-        let bogus_type = IntTypeID::I64.as_type();
-        let bogus_var = VarScopeEntry::new(bogus_type, String::from("other_type"), false);
-        scope.add(
-            String::from("other_type"),
-            Rc::new(bogus_var.as_scope_entry()),
-        );
-
-        // Add 4 entries
-        for i in 'a'..='d' {
-            let var = VarScopeEntry::new(type_id.clone(), i.to_string(), false);
-            scope.add(i.to_string(), Rc::new(var.as_scope_entry()));
-        }
-        let filtered: Vec<(String, Rc<ScopeEntry>)> = scope.filter_by_type(type_id.clone());
-        assert_eq!(filtered.len(), 4);
-
-        let mut child_scope = Scope::new_from_parent(Rc::new(RefCell::new(scope)));
-
-        // Add another 4 entries
-        for i in 'e'..='h' {
-            let var = VarScopeEntry::new(type_id.clone(), i.to_string(), false);
-            child_scope.add(i.to_string(), Rc::new(var.as_scope_entry()));
-        }
-
-        let filtered = child_scope.filter_by_type(type_id.clone());
-
-        assert_eq!(filtered.len(), 8);
-    }
-
-    #[test]
-    fn flattens_struct_field_scope_entries() {
+        Inserting struct B should result in scope entries:
+        - b, b.field1, b.field1.field1, b.field2
+    */
+    fn correct_number_of_struct_entries() {
         let mut scope = Scope::new();
 
-        let var_name = String::from("test");
-        let struct_name = String::from("Test");
-        let mut struct_template = StructTemplate::new(struct_name);
+        // Setup begins here
+        let i32_type = IntTypeID::I32.as_type();
 
-        struct_template.insert_field(String::from("field_1"), IntTypeID::U8.as_type());
+        let struct_c_type = TypeID::StructType("C".to_string());
+        let struct_c_fields = vec![("field_1".to_string(), i32_type.clone())];
+        let struct_c_template = StructTemplate::new_from_fields("C".to_string(), struct_c_fields);
 
-        // 3rd argument flattened_fields expects an already flattened string with periods, allowing access
-        // directly when obtaining the scope_entry from the flattened struct
-        let struct_scope_entry = StructScopeEntry::new(
-            var_name.clone(),
-            BorrowTypeID::None,
-            struct_template,
-            vec![(String::from(".field_1"), IntTypeID::U8.as_type())],
-            false,
-        );
+        let struct_b_fields = vec![
+            ("field_1".to_string(), struct_c_type.clone()),
+            ("field_2".to_string(), i32_type.clone()),
+        ];
+        let struct_b_template = StructTemplate::new_from_fields("B".to_string(), struct_b_fields);
 
-        scope.add(var_name, Rc::new(struct_scope_entry.as_scope_entry()));
+        let mut struct_table = StructTable::new();
+        struct_table.insert_struct(struct_c_template);
+        struct_table.insert_struct(struct_b_template.clone());
 
-        println!("{:#?}", scope);
+        let struct_entry =
+            StructScopeEntry::new(BorrowTypeID::None, struct_b_template, &struct_table, false)
+                .as_scope_entry();
 
-        assert_eq!(2, scope.get_all_entries().len());
+        scope.insert(&"a".to_string(), struct_entry);
+
+        assert_eq!(scope.get_all_entries().len(), 4);
+
+        println!("{:#?}", scope.get_all_entries());
     }
 
     #[test]
-    fn filters_with_closure_correctly() {
-        let scope = Rc::new(RefCell::new(Scope::new()));
-
-        let type_id = IntTypeID::U8.as_type();
-        let var_name = String::from("a");
-
-        scope.borrow_mut().add(
-            var_name.clone(),
-            Rc::new(VarScopeEntry::new(type_id.clone(), var_name, false).as_scope_entry()),
-        );
-
-        let correct_closure = |scope_entry: &ScopeEntry, _| -> bool {
-            scope_entry.is_var() && scope_entry.get_type() == type_id.clone()
-        };
-
-        assert_eq!(scope.borrow().filter_with_closure(correct_closure).len(), 1);
-
-        let incorrect_closure = |scope_entry: &ScopeEntry, _| -> bool {
-            scope_entry.is_func() && scope_entry.get_type() == type_id.clone()
-        };
-
-        assert_eq!(
-            scope.borrow().filter_with_closure(incorrect_closure).len(),
-            0
-        );
-    }
-
-    #[test]
-    fn updates_borrow_status_correctly() {
-        let mut scope = Scope::new();
-        let type_id = IntTypeID::U8.as_type();
-        let var_name = String::from("a");
-
-        // Borrow status is None
-        scope.add(
-            var_name.clone(),
-            Rc::new(VarScopeEntry::new(type_id.clone(), var_name.clone(), false).as_scope_entry()),
-        );
-
-        // Set borrow status to mutably borrowed
-        scope.set_borrow_status(var_name, BorrowStatus::MutBorrowed);
-
-        assert!(scope.contains_filter(|x, y| x.is_var() && y == BorrowStatus::MutBorrowed));
-
-        assert!(!scope.contains_filter(|x, y| x.is_var() && y == BorrowStatus::None))
-    }
-
-    #[test]
-    fn changes_struct_borrow_status_when_borrowing_field() {
+    fn removes_borrow() {
+        /* This test mimics the following:
+            let a = _;
+            let b = &a;
+            drop(b);
+        */
         let mut scope = Scope::new();
 
-        let var_name = String::from("test");
-        let struct_name = String::from("Test");
-        let mut struct_template = StructTemplate::new(struct_name);
+        let a = "a".to_string();
+        let b = "b".to_string();
 
-        struct_template.insert_field(String::from("field_1"), IntTypeID::U8.as_type());
+        let entry_a = Var::new(TypeID::NullType, a.clone(), false).as_scope_entry();
+        let entry_b = Var::new(TypeID::NullType, b.clone(), false).as_scope_entry();
 
-        let struct_scope_entry = StructScopeEntry::new(
-            var_name.clone(),
-            BorrowTypeID::None,
-            struct_template,
-            vec![(String::from(".field_1"), IntTypeID::U8.as_type())],
-            false,
-        );
+        scope.insert(&a, entry_a);
+        scope.insert_borrow(&b, entry_b, &a);
 
-        // Borrow status is None for the struct
-        scope.add(
-            var_name.clone(),
-            Rc::new(struct_scope_entry.as_scope_entry()),
-        );
+        assert_eq!(scope.borrow_count(&a), 1);
 
-        // This should return a vec containing the struct's field
-        let result = scope.filter_with_closure(|x, y| x.is_var() && y == BorrowStatus::None);
+        scope.remove_entry(&b);
 
-        assert_eq!(result.len(), 1);
+        assert_eq!(scope.borrow_count(&a), 0);
+    }
 
-        // Before we borrow the struct field
-        assert_eq!(
-            scope.get_entries().get(&var_name).unwrap().1,
-            BorrowStatus::None
-        );
+    #[test]
+    fn mut_borrow_deletes_all_borrows() {
+        let mut scope = Scope::new();
 
-        // Borrow the struct field
-        let (struct_field_name, _, _) = &result[0];
-        scope.set_borrow_status(struct_field_name.clone(), BorrowStatus::Borrowed);
+        let a = "a".to_string();
+        let b = "b".to_string();
+        let c = "c".to_string();
 
-        // After we borrow the struct field
-        assert_eq!(
-            scope.get_entries().get(&var_name).unwrap().1,
-            BorrowStatus::Borrowed
-        );
+        let entry_a = Var::new(TypeID::NullType, a.clone(), false).as_scope_entry();
+        let entry_b = Var::new(TypeID::NullType, b.clone(), false).as_scope_entry();
+        let entry_c = Var::new(TypeID::NullType, c.clone(), false).as_scope_entry();
+
+        scope.insert(&a, entry_a);
+        scope.insert_borrow(&b, entry_b, &a);
+
+        assert_eq!(scope.borrow_count(&a), 1);
+
+        scope.insert_mut_borrow(&c, entry_c, &a);
+        assert_eq!(scope.borrow_count(&a), 0);
+    }
+
+    #[test]
+    fn borrow_deletes_all_mut_borrows() {
+        let mut scope = Scope::new();
+
+        let a = "a".to_string();
+        let b = "b".to_string();
+        let c = "c".to_string();
+
+        let entry_a = Var::new(TypeID::NullType, a.clone(), false).as_scope_entry();
+        let entry_b = Var::new(TypeID::NullType, b.clone(), false).as_scope_entry();
+        let entry_c = Var::new(TypeID::NullType, c.clone(), false).as_scope_entry();
+
+        scope.insert(&a, entry_a);
+
+        scope.insert_mut_borrow(&c, entry_c, &a);
+        assert!(scope.is_mut_borrowed(&a));
+
+        scope.insert_borrow(&b, entry_b, &a);
+        assert!(!scope.is_mut_borrowed(&a));
+    }
+
+    #[test]
+    /*  This test reflects the following case:
+        struct A -> {field1: B, field2: i32}
+        struct B -> {field1: C, field2: i32}
+        struct C -> {field1: i32}
+
+        let a = A();
+        borrow a.field1.field1 (type C)
+
+        As a result, the following become borrowed:
+        - a (type A)
+        - a.field1 (type B)
+        - a.field1.field1 (type C)
+        - a.field1.field1.field1 (type i32)
+
+        The remaining fields are not borrowed:
+        - a.field2
+        - a.field1.field2
+    */
+    fn borrowing_struct_field_correctly_borrows_parents_and_children() {
+        let mut scope = Scope::new();
+
+        // Setup begins here
+        let i32_type = IntTypeID::I32.as_type();
+
+        let struct_c_type = TypeID::StructType("C".to_string());
+        let struct_c_fields = vec![("field1".to_string(), i32_type.clone())];
+        let struct_c_template = StructTemplate::new_from_fields("C".to_string(), struct_c_fields);
+
+        let struct_b_type = TypeID::StructType("B".to_string());
+        let struct_b_fields = vec![
+            ("field1".to_string(), struct_c_type.clone()),
+            ("field2".to_string(), i32_type.clone()),
+        ];
+        let struct_b_template = StructTemplate::new_from_fields("B".to_string(), struct_b_fields);
+
+        let struct_a_type = TypeID::StructType("A".to_string());
+        let struct_a_fields = vec![
+            ("field1".to_string(), struct_b_type.clone()),
+            ("field2".to_string(), i32_type.clone()),
+        ];
+        let struct_a_template = StructTemplate::new_from_fields("A".to_string(), struct_a_fields);
+
+        let var_a = "a".to_string();
+        let var_borrower = "borrower".to_string();
+
+        let mut struct_table = StructTable::new();
+        struct_table.insert_struct(struct_a_template.clone());
+        struct_table.insert_struct(struct_b_template.clone());
+        struct_table.insert_struct(struct_c_template.clone());
+
+        let entry_a =
+            StructScopeEntry::new(BorrowTypeID::None, struct_a_template, &struct_table, false)
+                .as_scope_entry();
+
+        let entry_borrower =
+            Var::new(struct_a_type.clone(), var_borrower.clone(), false).as_scope_entry();
+
+        // Setup ends here
+
+        // Borrow test begins here
+        scope.insert(&var_a, entry_a);
+
+        println!("{:#?}", scope.borrows);
+
+        let borrow_source = String::from("a.field1.field1");
+
+        // Borrow
+        scope.insert_borrow(&var_borrower, entry_borrower, &borrow_source);
+        // Borrowed struct fields
+        assert_eq!(scope.borrow_count(&var_a), 1);
+
+        assert_eq!(scope.borrow_count(&"a.field1".to_string()), 1);
+        assert_eq!(scope.borrow_count(&"a.field1.field1".to_string()), 1);
+        assert_eq!(scope.borrow_count(&"a.field1.field1.field1".to_string()), 1);
+
+        // Not borrowed struct fields
+        assert_eq!(scope.borrow_count(&"a.field2".to_string()), 0);
+        assert_eq!(scope.borrow_count(&"a.field1.field2".to_string()), 0);
+
+        // Check that removing borrow clears everything
+        scope.remove_entry(&var_borrower);
     }
 }

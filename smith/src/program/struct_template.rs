@@ -19,6 +19,14 @@ impl StructTemplate {
         }
     }
 
+    pub fn new_from_fields(name: String, fields: Vec<(String, TypeID)>) -> Self {
+        StructTemplate {
+            fields,
+            name,
+            derive: Vec::new(),
+        }
+    }
+
     pub fn get_type(&self) -> TypeID {
         TypeID::StructType(self.name.clone())
     }

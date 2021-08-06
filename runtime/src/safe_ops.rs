@@ -8,7 +8,9 @@ pub trait SafeArithmetic {
 macro_rules! impl_safe_arithmetic {
     (for $($t:ty),+) => {
         $(impl SafeArithmetic for $t {
-            fn safe_add(self, other: Self) -> Self {
+
+    #[inline]
+    fn safe_add(self, other: Self) -> Self {
         let checked_result = self.checked_add(other);
         match checked_result {
             Some(result) => result,
@@ -16,6 +18,7 @@ macro_rules! impl_safe_arithmetic {
         }
     }
 
+    #[inline]
     fn safe_sub(self, other: Self) -> Self {
         let checked_result = self.checked_sub(other);
         match checked_result {
@@ -24,6 +27,7 @@ macro_rules! impl_safe_arithmetic {
         }
     }
 
+    #[inline]
     fn safe_mul(self, other: Self) -> Self {
         let checked_result = self.checked_mul(other);
         match checked_result {
@@ -32,6 +36,7 @@ macro_rules! impl_safe_arithmetic {
         }
     }
 
+    #[inline]
     fn safe_div(self, other: Self) -> Self {
         let checked_result = self.checked_div(other);
         match checked_result {

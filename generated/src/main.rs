@@ -4,8 +4,6 @@ use std::fs;
 fn main() {
     let config = RunConfig::new_from_args(get_args());
 
-    println!("{:#?}", config);
-
     let progress_bar = ProgressBar::new(config.count());
 
     for seed in config.seed()..config.seed() + config.count() {

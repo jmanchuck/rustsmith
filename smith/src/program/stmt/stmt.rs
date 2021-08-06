@@ -15,6 +15,7 @@ pub enum Stmt {
     AssignStatement(AssignStmt),
     ReturnStatement(ReturnStmt),
     ExprStatement(ExprStmt),
+    LoopStatement(ExprStmt),
 }
 
 impl ToString for Stmt {
@@ -26,6 +27,7 @@ impl ToString for Stmt {
             Self::AssignStatement(s) => s.to_string(),
             Self::ReturnStatement(s) => s.to_string(),
             Self::ExprStatement(s) => s.to_string(),
+            Self::LoopStatement(s) => s.to_string(),
         }
     }
 }

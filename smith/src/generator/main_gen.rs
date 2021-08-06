@@ -4,22 +4,22 @@ use std::rc::Rc;
 use crate::program::program::Program;
 use rand::Rng;
 
+use super::context::Context;
 use super::func_gen::FuncGenerator;
-use super::scope::{FuncScopeEntry, Scope};
+use super::scope_entry::FuncScopeEntry;
 use super::struct_gen::StructTable;
 
 pub const MAX_STATICS: u32 = 2;
 pub const MAX_STRUCTS: u32 = 2;
-pub const MAX_FUNCS: u32 = 8;
-pub const MAX_FUNC_PARAMS: u32 = 8;
+pub const MAX_FUNCS: u32 = 4;
+pub const MAX_FUNC_PARAMS: u32 = 4;
 
 pub fn gen_main<R: Rng>(rng: &mut R) -> String {
     let mut func_count: u8 = 0;
 
     let mut program = Program::new();
 
-    let global_scope = Scope::new();
-    let current_scope = Rc::new(RefCell::new(global_scope));
+    let context = Rc::new(RefCell::new(Context::new()));
 
     let mut struct_table = StructTable::new();
 
@@ -40,14 +40,12 @@ pub fn gen_main<R: Rng>(rng: &mut R) -> String {
         // generate main on some probability proportional to number of generated funcs vs max (linear)
         let is_main = rng.gen_range(0.0..1.0) < func_count as f32 / MAX_FUNCS as f32;
 
-        let function = func_gen.gen_func(Rc::clone(&current_scope), rng, is_main);
+        let function = func_gen.gen_func(Rc::clone(&context), rng, is_main);
 
-        current_scope.borrow_mut().add(
-            function.get_name(),
-            Rc::new(
-                FuncScopeEntry::new(function.get_return_type(), function.get_template())
-                    .as_scope_entry(),
-            ),
+        context.borrow().scope.borrow_mut().insert(
+            &function.get_name(),
+            FuncScopeEntry::new(function.get_return_type(), function.get_template())
+                .as_scope_entry(),
         );
 
         program.push_function(function);
