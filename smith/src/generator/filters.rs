@@ -1,6 +1,6 @@
 use crate::program::types::{BorrowStatus, BorrowTypeID, TypeID};
 
-use super::scope::ScopeEntry;
+use super::scope_entry::ScopeEntry;
 
 pub fn is_func_filter() -> Box<dyn Fn(&ScopeEntry, BorrowStatus) -> bool> {
     Box::new(|scope_entry, _| scope_entry.is_func())
@@ -38,7 +38,7 @@ pub fn is_not_borrowed_filter() -> Box<dyn Fn(&ScopeEntry, BorrowStatus) -> bool
 
 #[cfg(test)]
 mod test {
-    use crate::generator::scope::VarScopeEntry;
+    use crate::generator::scope_entry::VarScopeEntry;
 
     use super::*;
     #[test]
