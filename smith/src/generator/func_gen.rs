@@ -1,14 +1,14 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{
+    context::Context,
     main_gen,
     name_gen::NameGenerator,
-    scope::{Scope, ScopeEntry},
     stmt_gen::{self, StmtGenerator},
     struct_gen::StructTable,
 };
 use crate::{
-    generator::{scope::StructScopeEntry, struct_gen},
+    generator::{scope_entry::ScopeEntry, scope_entry::StructScopeEntry, struct_gen},
     program::{
         function::{Function, Param},
         stmt::block_stmt::BlockStmt,
@@ -50,8 +50,7 @@ impl<'a> FuncGenerator<'a> {
         Param::new_with_borrow(name, rand_type_id, rand_borrow_type_id)
     }
 
-    // TODO: Allow it to take global struct once and only once
-    fn gen_params<R: Rng>(&self, scope: Rc<RefCell<Scope>>, rng: &mut R) -> Vec<Param> {
+    fn gen_params<R: Rng>(&self, context: Rc<RefCell<Context>>, rng: &mut R) -> Vec<Param> {
         let mut has_global_struct = false;
 
         let mut param_name_gen = NameGenerator::new(String::from("param_"));
@@ -82,9 +81,8 @@ impl<'a> FuncGenerator<'a> {
                 TypeID::StructType(struct_name) => {
                     let struct_template =
                         self.struct_table.get_struct_template(&struct_name).unwrap();
-                    let flattened_fields = self.struct_table.flatten_struct(&struct_name);
                     let struct_scope_entry =
-                        StructScopeEntry::from_param(&param, struct_template, flattened_fields);
+                        StructScopeEntry::from_param(&param, struct_template, self.struct_table);
                     scope_entry = ScopeEntry::Struct(struct_scope_entry);
                 }
                 TypeID::NullType => panic!("Trying to generate param of null type"),
@@ -96,9 +94,11 @@ impl<'a> FuncGenerator<'a> {
 
             param_list.push(param.clone());
 
-            scope
+            context
+                .borrow()
+                .scope
                 .borrow_mut()
-                .insert(&param.get_name(), Rc::new(scope_entry));
+                .insert(&param.get_name(), scope_entry);
         }
 
         param_list
@@ -107,12 +107,12 @@ impl<'a> FuncGenerator<'a> {
     // Returns the generated function and whether or not it is the main function
     pub fn gen_func<R: Rng>(
         &mut self,
-        scope: Rc<RefCell<Scope>>,
+        context: Rc<RefCell<Context>>,
         rng: &mut R,
         is_main: bool,
     ) -> Function {
-        // Function scope
-        let function_scope = Rc::new(RefCell::new(Scope::new_from_parent(Rc::clone(&scope))));
+        // Function scope, add params
+        context.borrow_mut().enter_scope();
 
         let params: Vec<Param>;
         let func_name: String;
@@ -123,7 +123,7 @@ impl<'a> FuncGenerator<'a> {
             func_name = String::from("main");
             return_type = TypeID::NullType;
         } else {
-            params = self.gen_params(Rc::clone(&function_scope), rng);
+            params = self.gen_params(Rc::clone(&context), rng);
             func_name = self.name_gen.next().unwrap();
             return_type = self.struct_table.rand_type_with_null(rng);
         }
@@ -136,7 +136,7 @@ impl<'a> FuncGenerator<'a> {
             match self.struct_table.get_global_struct() {
                 Some(struct_template) => {
                     block_stmt = stmt_generator.block_stmt_main(
-                        Rc::clone(&function_scope),
+                        Rc::clone(&context),
                         struct_template,
                         stmt_gen::MAX_STMT_DEPTH,
                         rng,
@@ -144,7 +144,7 @@ impl<'a> FuncGenerator<'a> {
                 }
                 None => {
                     block_stmt = stmt_generator.block_stmt_with_return(
-                        Rc::clone(&function_scope),
+                        Rc::clone(&context),
                         stmt_gen::MAX_STMT_DEPTH,
                         rng,
                         return_type.clone(),
@@ -153,12 +153,14 @@ impl<'a> FuncGenerator<'a> {
             }
         } else {
             block_stmt = stmt_generator.block_stmt_with_return(
-                Rc::clone(&function_scope),
+                Rc::clone(&context),
                 stmt_gen::MAX_STMT_DEPTH,
                 rng,
                 return_type.clone(),
             )
         }
+
+        context.borrow_mut().leave_scope();
 
         Function::new(func_name, params, return_type, block_stmt)
     }

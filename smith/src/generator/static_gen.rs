@@ -5,11 +5,8 @@ use rand::Rng;
 
 use crate::program::stmt::static_stmt::StaticStmt;
 
-use super::{
-    expr_gen::ExprGenerator,
-    name_gen::NameGenerator,
-    scope::{Scope, VarScopeEntry},
-};
+use super::scope_entry::VarScopeEntry;
+use super::{expr_gen::ExprGenerator, name_gen::NameGenerator, scope::Scope};
 
 pub struct StaticGenerator {
     name_gen: NameGenerator,
@@ -27,9 +24,7 @@ impl StaticGenerator {
         let var_name = self.name_gen.next().unwrap();
         scope.borrow_mut().insert(
             &var_name.clone(),
-            Rc::new(
-                VarScopeEntry::new(static_int.get_type(), var_name.clone(), false).as_scope_entry(),
-            ),
+            VarScopeEntry::new(static_int.get_type(), var_name.clone(), false).as_scope_entry(),
         );
 
         StaticStmt::new(var_name, static_int.get_type(), static_int.as_expr())
