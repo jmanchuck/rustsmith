@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 
 use crate::program::types::BorrowStatus;
 
