@@ -20,7 +20,7 @@ use crate::program::{
 
 use super::{
     context::Context,
-    expr_gen::{self, ExprGenerator},
+    expr_gen::ExprGenerator,
     name_gen::NameGenerator,
     scope_entry::{ScopeEntry, StructScopeEntry},
     struct_gen::{self, StructTable},
@@ -111,9 +111,10 @@ impl<'a> StmtGenerator<'a> {
             Rc::clone(&context),
             return_type.clone(),
             BorrowTypeID::None,
-            expr_gen::MAX_EXPR_DEPTH,
         );
         let return_expr = expr_generator.expr(rng);
+        context.borrow_mut().reset_expr_depths();
+
         let return_stmt = ReturnStmt::new(return_type, return_expr);
 
         block_stmt.push(return_stmt.as_stmt());
@@ -141,13 +142,13 @@ impl<'a> StmtGenerator<'a> {
     pub fn let_stmt<R: Rng>(&mut self, context: Rc<RefCell<Context>>, rng: &mut R) -> LetStmt {
         let rand_type_id = self.struct_table.rand_type(rng);
 
+        context.borrow_mut().expr_depth = 0;
         // TODO: Allow let statements for mutable and immutable references
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&context),
             rand_type_id.clone(),
             BorrowTypeID::None,
-            expr_gen::MAX_EXPR_DEPTH,
         );
 
         // TODO: make this a better random choice to choose whether mutable variable or not
@@ -162,6 +163,8 @@ impl<'a> StmtGenerator<'a> {
 
         context.borrow_mut().enter_scope();
         let expr = expr_generator.expr(rng);
+        context.borrow_mut().reset_expr_depths();
+
         context.borrow_mut().leave_scope();
 
         let scope_entry: ScopeEntry;
@@ -196,16 +199,21 @@ impl<'a> StmtGenerator<'a> {
         let rand_int_type: IntTypeID = rand::random();
         let rand_type = rand_int_type.as_type();
 
+        context.borrow_mut().expr_depth = 0;
+
         let generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&context),
             rand_type.clone(),
             BorrowTypeID::None,
-            expr_gen::MAX_EXPR_DEPTH,
         );
 
-        let lower_range = generator.arith_expr(expr_gen::MAX_EXPR_DEPTH, rng);
-        let upper_range = generator.arith_expr(expr_gen::MAX_EXPR_DEPTH, rng);
+        let lower_range = generator.arith_expr(rng);
+        context.borrow_mut().reset_expr_depths();
+
+        let upper_range = generator.arith_expr(rng);
+        context.borrow_mut().reset_expr_depths();
+
         let iter_expr = IterRange::new(rand_int_type, lower_range, upper_range).as_iter_expr();
 
         let var = Var::new(rand_type.clone(), self.var_name_gen.next().unwrap(), false);
@@ -260,10 +268,11 @@ impl<'a> StmtGenerator<'a> {
             Rc::clone(&context),
             type_id.clone(),
             BorrowTypeID::None,
-            expr_gen::MAX_EXPR_DEPTH,
         );
 
         let expr = expr_generator.expr(rng);
+        context.borrow_mut().reset_expr_depths();
+
         context.borrow_mut().stmt_type.pop();
 
         let left_var = Var::new(scope_entry.get_type(), var_name.clone(), true);
@@ -284,13 +293,13 @@ impl<'a> StmtGenerator<'a> {
         rng: &mut R,
     ) -> ConditionalStmt {
         let mut conditional_blocks: Vec<(BoolExpr, BlockStmt)> = Vec::new();
+        context.borrow_mut().expr_depth = 0;
 
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&context),
             TypeID::BoolType,
             BorrowTypeID::None,
-            expr_gen::MAX_EXPR_DEPTH,
         );
 
         loop {
@@ -300,7 +309,9 @@ impl<'a> StmtGenerator<'a> {
                 break;
             }
             context.borrow_mut().enter_scope();
-            let bool_expr = expr_generator.bool_expr(expr_gen::MAX_EXPR_DEPTH, rng);
+            let bool_expr = expr_generator.bool_expr(rng);
+            context.borrow_mut().reset_expr_depths();
+
             context.borrow_mut().leave_scope();
 
             let block_stmt = self.block_stmt(Rc::clone(&context), depth - 1, rng);
@@ -324,15 +335,17 @@ impl<'a> StmtGenerator<'a> {
         context: Rc<RefCell<Context>>,
         rng: &mut R,
     ) -> Stmt {
+        context.borrow_mut().expr_depth = 0;
+
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&context),
             struct_template.get_type(),
             BorrowTypeID::None,
-            expr_gen::MAX_EXPR_DEPTH,
         );
 
         let expr = expr_generator.global_struct_expr(rng).as_expr();
+        context.borrow_mut().reset_expr_depths();
 
         let scope_entry =
             StructScopeEntry::new(BorrowTypeID::None, struct_template, self.struct_table, true)

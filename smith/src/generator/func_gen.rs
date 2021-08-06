@@ -1,20 +1,20 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{
+    consts,
     context::Context,
-    main_gen,
     name_gen::NameGenerator,
+    scope_entry::ScopeEntry,
+    scope_entry::StructScopeEntry,
     stmt_gen::{self, StmtGenerator},
+    struct_gen,
     struct_gen::StructTable,
 };
-use crate::{
-    generator::{scope_entry::ScopeEntry, scope_entry::StructScopeEntry, struct_gen},
-    program::{
-        function::{Function, Param},
-        stmt::block_stmt::BlockStmt,
-        types::{BorrowTypeID, TypeID},
-        var::Var,
-    },
+use crate::program::{
+    function::{Function, Param},
+    stmt::block_stmt::BlockStmt,
+    types::{BorrowTypeID, TypeID},
+    var::Var,
 };
 use rand::Rng;
 
@@ -57,8 +57,7 @@ impl<'a> FuncGenerator<'a> {
         let mut param_list: Vec<Param> = Vec::new();
 
         for _ in 0..self.max_params {
-            if rng.gen_range(0.0..1.0) < param_list.len() as f32 / main_gen::MAX_FUNC_PARAMS as f32
-            {
+            if rng.gen_range(0.0..1.0) < param_list.len() as f32 / consts::MAX_FUNC_PARAMS as f32 {
                 break;
             }
 

@@ -20,16 +20,13 @@ use crate::program::{
 };
 use rand::{seq::SliceRandom, Rng};
 
-use super::{context::Context, scope_entry::ScopeEntry, struct_gen::StructTable};
-
-pub const MAX_EXPR_DEPTH: u32 = 4;
+use super::{consts, context::Context, scope_entry::ScopeEntry, struct_gen::StructTable};
 
 pub struct ExprGenerator<'table> {
     struct_table: &'table StructTable,
     context: Rc<RefCell<Context>>,
     type_id: TypeID,
     borrow_type_id: BorrowTypeID,
-    depth: u32,
 }
 
 impl<'table> ExprGenerator<'table> {
@@ -38,14 +35,12 @@ impl<'table> ExprGenerator<'table> {
         context: Rc<RefCell<Context>>,
         type_id: TypeID,
         borrow_type_id: BorrowTypeID,
-        depth: u32,
     ) -> Self {
         ExprGenerator {
             struct_table,
             context,
             type_id,
             borrow_type_id,
-            depth,
         }
     }
 
@@ -59,18 +54,23 @@ impl<'table> ExprGenerator<'table> {
             context: Rc::clone(&other.context),
             type_id,
             borrow_type_id,
-            depth: if other.depth == 0 { 0 } else { other.depth - 1 },
         }
     }
 
     pub fn expr<R: Rng>(&self, rng: &mut R) -> Expr {
-        let result = match &self.type_id {
-            TypeID::IntType(_) => self.arith_expr(self.depth, rng).as_expr(),
-            TypeID::StructType(struct_name) => self.struct_expr(struct_name.clone(), rng).as_expr(),
-            TypeID::BoolType => self.bool_expr(self.depth, rng).as_expr(),
-            TypeID::NullType => panic!("Tried to construct an expression of null type"),
-        };
-        result
+        self.context.borrow_mut().expr_depth += 1;
+        if self.context.borrow().expr_depth < consts::MAX_EXPR_DEPTH {
+            match &self.type_id {
+                TypeID::IntType(_) => self.arith_expr(rng).as_expr(),
+                TypeID::StructType(struct_name) => {
+                    self.struct_expr(struct_name.clone(), rng).as_expr()
+                }
+                TypeID::BoolType => self.bool_expr(rng).as_expr(),
+                TypeID::NullType => panic!("Tried to construct an expression of null type"),
+            }
+        } else {
+            self.literal_expr(rng)
+        }
     }
 
     // TODO: Ideally we shouldn't have this, and use a context to decide where to go
@@ -184,7 +184,9 @@ impl<'table> ExprGenerator<'table> {
         StructLiteral::new(struct_template, field_values)
     }
 
-    pub fn arith_expr<R: Rng>(&self, depth: u32, rng: &mut R) -> ArithmeticExpr {
+    pub fn arith_expr<R: Rng>(&self, rng: &mut R) -> ArithmeticExpr {
+        self.context.borrow_mut().arith_expr_depth += 1;
+
         let expr_choice: ArithmeticExprVariants = rng.gen();
         let arith_var_filter = |scope_entry: Rc<ScopeEntry>, borrow_status: BorrowStatus| -> bool {
             scope_entry.is_var()
@@ -200,8 +202,10 @@ impl<'table> ExprGenerator<'table> {
         };
 
         match expr_choice {
-            ArithmeticExprVariants::Binary if depth > 0 => {
-                self.binary_int_expr(depth, rng).as_arith_expr()
+            ArithmeticExprVariants::Binary
+                if self.context.borrow().arith_expr_depth < consts::MAX_ARITH_EXPR_DEPTH =>
+            {
+                self.binary_int_expr(rng).as_arith_expr()
             }
             ArithmeticExprVariants::Var
                 if self
@@ -222,7 +226,7 @@ impl<'table> ExprGenerator<'table> {
                     .scope
                     .borrow()
                     .contains_filter(arith_func_filter)
-                    && depth > 0 =>
+                    && self.context.borrow().expr_depth < consts::MAX_EXPR_DEPTH =>
             {
                 let result = self.func_call_expr(rng);
 
@@ -235,11 +239,11 @@ impl<'table> ExprGenerator<'table> {
         }
     }
 
-    fn binary_int_expr<R: Rng>(&self, depth: u32, rng: &mut R) -> BinaryExpr {
+    fn binary_int_expr<R: Rng>(&self, rng: &mut R) -> BinaryExpr {
         let op: BinaryOp = rng.gen();
 
-        let left = self.arith_expr(depth - 1, rng);
-        let right = self.arith_expr(depth - 1, rng);
+        let left = self.arith_expr(rng);
+        let right = self.arith_expr(rng);
 
         BinaryExpr::new(left, right, op)
     }
@@ -252,7 +256,9 @@ impl<'table> ExprGenerator<'table> {
         }
     }
 
-    pub fn bool_expr<R: Rng>(&self, depth: u32, rng: &mut R) -> BoolExpr {
+    pub fn bool_expr<R: Rng>(&self, rng: &mut R) -> BoolExpr {
+        self.context.borrow_mut().bool_expr_depth += 1;
+
         let expr_choice: BoolExprVariants = rng.gen();
         let bool_var_filter = |scope_entry: Rc<ScopeEntry>, borrow_status: BorrowStatus| -> bool {
             scope_entry.is_var()
@@ -267,14 +273,20 @@ impl<'table> ExprGenerator<'table> {
         };
 
         match expr_choice {
-            BoolExprVariants::Binary if depth > 0 => {
-                self.binary_bool_expr(depth, rng).as_bool_expr()
+            BoolExprVariants::Binary
+                if self.context.borrow().bool_expr_depth < consts::MAX_BOOL_EXPR_DEPTH =>
+            {
+                self.binary_bool_expr(rng).as_bool_expr()
             }
-            BoolExprVariants::Comparison if depth > 0 => {
-                self.comparison_expr(depth, rng).as_bool_expr()
+            BoolExprVariants::Comparison
+                if self.context.borrow().bool_expr_depth < consts::MAX_BOOL_EXPR_DEPTH =>
+            {
+                self.comparison_expr(rng).as_bool_expr()
             }
-            BoolExprVariants::Negation if depth > 0 => {
-                self.negation_expr(depth, rng).as_bool_expr()
+            BoolExprVariants::Negation
+                if self.context.borrow().bool_expr_depth < consts::MAX_BOOL_EXPR_DEPTH =>
+            {
+                self.negation_expr(rng).as_bool_expr()
             }
             BoolExprVariants::Func
                 if self
@@ -283,7 +295,7 @@ impl<'table> ExprGenerator<'table> {
                     .scope
                     .borrow()
                     .contains_filter(bool_func_filter)
-                    && depth > 0 =>
+                    && self.context.borrow().bool_expr_depth < consts::MAX_BOOL_EXPR_DEPTH =>
             {
                 let result = self.func_call_expr(rng);
                 match result {
@@ -309,16 +321,16 @@ impl<'table> ExprGenerator<'table> {
         BoolValue::new(rng.gen::<bool>())
     }
 
-    fn binary_bool_expr<R: Rng>(&self, depth: u32, rng: &mut R) -> BinBoolExpr {
+    fn binary_bool_expr<R: Rng>(&self, rng: &mut R) -> BinBoolExpr {
         let op: BoolOp = rng.gen();
 
-        let left = self.bool_expr(depth - 1, rng);
-        let right = self.bool_expr(depth - 1, rng);
+        let left = self.bool_expr(rng);
+        let right = self.bool_expr(rng);
 
         BinBoolExpr::new(left, right, op)
     }
 
-    fn comparison_expr<R: Rng>(&self, depth: u32, rng: &mut R) -> ComparisonExpr {
+    fn comparison_expr<R: Rng>(&self, rng: &mut R) -> ComparisonExpr {
         let op: ComparisonOp = rng.gen();
 
         let int_type: IntTypeID = rng.gen();
@@ -326,14 +338,14 @@ impl<'table> ExprGenerator<'table> {
         // TODO: Borrow type
         let generator = ExprGenerator::new_sub_expr(self, int_type.as_type(), BorrowTypeID::None);
 
-        let left = generator.arith_expr(depth - 1, rng);
-        let right = generator.arith_expr(depth - 1, rng);
+        let left = generator.arith_expr(rng);
+        let right = generator.arith_expr(rng);
 
         ComparisonExpr::new(left, right, op)
     }
 
-    fn negation_expr<R: Rng>(&self, depth: u32, rng: &mut R) -> NegationExpr {
-        let bool_expr = self.bool_expr(depth - 1, rng);
+    fn negation_expr<R: Rng>(&self, rng: &mut R) -> NegationExpr {
+        let bool_expr = self.bool_expr(rng);
 
         NegationExpr::new(bool_expr)
     }

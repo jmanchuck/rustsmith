@@ -4,11 +4,11 @@ use super::super::program::stmt::stmt::StmtVariants;
 use super::scope::Scope;
 pub struct Context {
     pub scope: Rc<RefCell<Scope>>,
-    pub loop_depth: usize,
-    pub expr_depth: usize, // For any nested expression
-    pub arith_expr_depth: usize,
-    pub bool_expr_depth: usize,
-    pub if_depth: usize,
+    pub loop_depth: u32,
+    pub expr_depth: u32, // For any nested expression
+    pub arith_expr_depth: u32,
+    pub bool_expr_depth: u32,
+    pub if_depth: u32,
     pub stmt_type: Vec<StmtVariants>,
 }
 
@@ -31,6 +31,14 @@ impl Context {
         };
 
         self.scope = parent;
+    }
+
+    pub fn reset_expr_depths(&mut self) {
+        self.loop_depth = 0;
+        self.expr_depth = 0;
+        self.if_depth = 0;
+        self.arith_expr_depth = 0;
+        self.bool_expr_depth = 0;
     }
 }
 

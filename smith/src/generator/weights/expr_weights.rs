@@ -9,8 +9,8 @@ use crate::program::expr::bool_expr::BoolExprVariants;
 use crate::program::expr::struct_expr::StructExprVariants;
 
 // We can modify this const into a static singleton struct and allow sample func to access atomically
-const ARITHMETIC_EXPR_WEIGHTS: [u32; ArithmeticExprVariants::COUNT] = [2, 2, 2, 2];
-const BOOL_EXPR_WEIGHTS: [u32; BoolExprVariants::COUNT] = [2, 1, 2, 2, 2, 1];
+const ARITHMETIC_EXPR_WEIGHTS: [u32; ArithmeticExprVariants::COUNT] = [2, 4, 2, 2];
+const BOOL_EXPR_WEIGHTS: [u32; BoolExprVariants::COUNT] = [2, 4, 2, 2, 2, 1];
 const STRUCT_EXPR_WEIGHTS: [u32; StructExprVariants::COUNT] = [1, 1];
 
 // impl ArithmeticExprVariants {
