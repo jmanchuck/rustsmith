@@ -1,14 +1,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use super::{
-    consts,
-    context::Context,
-    name_gen::NameGenerator,
-    scope_entry::ScopeEntry,
-    scope_entry::StructScopeEntry,
-    stmt_gen::{self, StmtGenerator},
-    struct_gen,
-    struct_gen::StructTable,
+    consts, context::Context, name_gen::NameGenerator, scope_entry::ScopeEntry,
+    scope_entry::StructScopeEntry, stmt_gen::StmtGenerator, struct_gen, struct_gen::StructTable,
 };
 use crate::program::{
     function::{Function, Param},
@@ -93,11 +87,29 @@ impl<'a> FuncGenerator<'a> {
 
             param_list.push(param.clone());
 
-            context
-                .borrow()
-                .scope
-                .borrow_mut()
-                .insert(&param.get_name(), scope_entry);
+            match param.get_borrow_type() {
+                BorrowTypeID::None => {
+                    context
+                        .borrow()
+                        .scope
+                        .borrow_mut()
+                        .insert(&param.get_name(), scope_entry);
+                }
+                BorrowTypeID::Ref => {
+                    context.borrow().scope.borrow_mut().insert_borrow(
+                        &param.get_name(),
+                        scope_entry,
+                        &param.get_name(),
+                    );
+                }
+                BorrowTypeID::MutRef => {
+                    context.borrow().scope.borrow_mut().insert_borrow(
+                        &param.get_name(),
+                        scope_entry,
+                        &param.get_name(),
+                    );
+                }
+            }
         }
 
         param_list
@@ -134,29 +146,20 @@ impl<'a> FuncGenerator<'a> {
         if is_main {
             match self.struct_table.get_global_struct() {
                 Some(struct_template) => {
-                    block_stmt = stmt_generator.block_stmt_main(
-                        Rc::clone(&context),
-                        struct_template,
-                        stmt_gen::MAX_STMT_DEPTH,
-                        rng,
-                    );
+                    block_stmt =
+                        stmt_generator.block_stmt_main(Rc::clone(&context), struct_template, rng);
                 }
                 None => {
                     block_stmt = stmt_generator.block_stmt_with_return(
                         Rc::clone(&context),
-                        stmt_gen::MAX_STMT_DEPTH,
                         rng,
                         return_type.clone(),
                     )
                 }
             }
         } else {
-            block_stmt = stmt_generator.block_stmt_with_return(
-                Rc::clone(&context),
-                stmt_gen::MAX_STMT_DEPTH,
-                rng,
-                return_type.clone(),
-            )
+            block_stmt =
+                stmt_generator.block_stmt_with_return(Rc::clone(&context), rng, return_type.clone())
         }
 
         context.borrow_mut().leave_scope();
