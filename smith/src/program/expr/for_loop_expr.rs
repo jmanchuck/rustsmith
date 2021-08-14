@@ -25,7 +25,7 @@ impl ForLoopExpr {
     }
 
     pub fn as_expr(self) -> Expr {
-        Expr::Loop(self)
+        Expr::Loop(Box::new(self))
     }
 }
 

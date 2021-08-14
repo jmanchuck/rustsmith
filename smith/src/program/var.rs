@@ -62,7 +62,7 @@ impl Var {
             type_id: param.get_type(),
             borrow_type: param.get_borrow_type(),
             name: param.get_name(),
-            is_mut: param.get_borrow_type() == BorrowTypeID::MutRef,
+            is_mut: false,
         }
     }
 
@@ -79,7 +79,7 @@ impl Var {
     }
 
     pub fn get_borrow_type(&self) -> BorrowTypeID {
-        self.borrow_type.clone()
+        self.borrow_type
     }
 
     pub fn get_name(&self) -> String {

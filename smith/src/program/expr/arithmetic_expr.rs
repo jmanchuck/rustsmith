@@ -1,17 +1,9 @@
-use super::{
-    expr::{Expr, LiteralExpr},
-    func_call_expr::FunctionCallExpr,
-};
+use super::{expr::Expr, func_call_expr::FunctionCallExpr};
 use crate::program::{
     types::{IntTypeID, TypeID},
     var::Var,
 };
-use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
 
-#[derive(EnumDiscriminants)]
-#[strum_discriminants(vis(pub))]
-#[strum_discriminants(name(ArithmeticExprVariants))]
-#[strum_discriminants(derive(EnumCount, EnumIter))]
 pub enum ArithmeticExpr {
     Int(IntExpr),
     Binary(Box<BinaryExpr>),
@@ -49,6 +41,16 @@ impl ToString for ArithmeticExpr {
             Self::Binary(s) => (*s).to_string_safe(),
             Self::Var(s) => s.to_string(),
             Self::Func(s) => s.to_string(),
+        }
+    }
+}
+
+impl From<Expr> for ArithmeticExpr {
+    fn from(expr: Expr) -> Self {
+        if let Expr::Arithmetic(result) = expr {
+            result
+        } else {
+            panic!("Could not perform conversion from Expr to ArithmeticExpr")
         }
     }
 }
@@ -182,7 +184,7 @@ impl IntExpr {
     }
 
     pub fn as_expr(self) -> Expr {
-        Expr::Literal(LiteralExpr::Int(self))
+        ArithmeticExpr::new_from_int_expr(self).as_expr()
     }
 
     pub fn as_arith_expr(self) -> ArithmeticExpr {

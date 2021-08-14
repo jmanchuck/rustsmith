@@ -33,7 +33,7 @@ impl ToString for BorrowExpr {
                 self.expr.to_string()
             )
         } else {
-            format!("{}", self.expr.to_string())
+            self.expr.to_string()
         }
     }
 }

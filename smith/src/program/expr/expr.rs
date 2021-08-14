@@ -1,6 +1,6 @@
 use crate::program::var::Var;
 
-use super::arithmetic_expr::{ArithmeticExpr, IntExpr};
+use super::arithmetic_expr::ArithmeticExpr;
 use super::bool_expr::BoolExpr;
 use super::borrow_expr::BorrowExpr;
 use super::for_loop_expr::ForLoopExpr;
@@ -10,38 +10,23 @@ use super::struct_expr::StructExpr;
 pub enum Expr {
     Arithmetic(ArithmeticExpr),
     Boolean(BoolExpr),
-    Literal(LiteralExpr),
+    Struct(StructExpr),
     Variable(Var),
     Borrow(Box<BorrowExpr>),
-    Loop(ForLoopExpr),
+    Loop(Box<ForLoopExpr>), // ForLoopExpr has large size, use box for reduced enum size
+    Raw(RawExpr),
 }
 
 impl ToString for Expr {
     fn to_string(&self) -> String {
         match self {
-            Self::Literal(s) => s.to_string(),
-            Self::Arithmetic(s) => s.to_string(),
-            Self::Variable(s) => s.to_string(),
-            Self::Boolean(s) => s.to_string(),
-            Self::Borrow(s) => (*s).to_string(),
-            Self::Loop(s) => s.to_string(),
-        }
-    }
-}
-
-// Literally
-pub enum LiteralExpr {
-    Int(IntExpr),
-    Struct(StructExpr),
-    Raw(RawExpr),
-}
-
-impl ToString for LiteralExpr {
-    fn to_string(&self) -> String {
-        match self {
-            Self::Int(s) => s.to_string(),
-            Self::Struct(s) => s.to_string(),
-            Self::Raw(s) => s.to_string(),
+            Expr::Arithmetic(s) => s.to_string(),
+            Expr::Boolean(s) => s.to_string(),
+            Expr::Struct(s) => s.to_string(),
+            Expr::Variable(s) => s.to_string(),
+            Expr::Borrow(s) => (*s).to_string(),
+            Expr::Loop(s) => (*s).to_string(),
+            Expr::Raw(s) => s.to_string(),
         }
     }
 }
@@ -58,7 +43,7 @@ impl RawExpr {
     }
 
     pub fn as_expr(self) -> Expr {
-        Expr::Literal(LiteralExpr::Raw(self))
+        Expr::Raw(self)
     }
 }
 

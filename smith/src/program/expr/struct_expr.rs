@@ -1,12 +1,7 @@
 use crate::program::{struct_template::StructTemplate, var::Var};
 
-use super::expr::{Expr, LiteralExpr};
-use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
+use super::expr::Expr;
 
-#[derive(EnumDiscriminants)]
-#[strum_discriminants(vis(pub))]
-#[strum_discriminants(name(StructExprVariants))]
-#[strum_discriminants(derive(EnumCount, EnumIter))]
 pub enum StructExpr {
     Literal(StructLiteral),
     Var(Var),
@@ -14,7 +9,7 @@ pub enum StructExpr {
 
 impl StructExpr {
     pub fn as_expr(self) -> Expr {
-        Expr::Literal(LiteralExpr::Struct(self))
+        Expr::Struct(self)
     }
 }
 
@@ -48,7 +43,7 @@ impl StructLiteral {
 
 impl ToString for StructLiteral {
     fn to_string(&self) -> String {
-        let struct_name = String::from(self.struct_template.get_name());
+        let struct_name = self.struct_template.get_name();
 
         let mut field_args = String::new();
 
@@ -58,9 +53,9 @@ impl ToString for StructLiteral {
             .map(|x| x.0.clone())
             .collect();
 
-        for i in 0..self.field_values.len() {
+        for (i, field_name) in field_names.iter().enumerate().take(self.field_values.len()) {
             field_args.push_str(
-                format!("{}: {}, ", field_names[i], self.field_values[i].to_string()).as_str(),
+                format!("{}: {}, ", field_name, self.field_values[i].to_string()).as_str(),
             );
         }
 

@@ -1,6 +1,6 @@
 use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
 
-#[derive(Debug, Clone, PartialEq, EnumDiscriminants, EnumCount, EnumIter)]
+#[derive(Debug, Copy, Clone, PartialEq, EnumDiscriminants, EnumCount, EnumIter)]
 pub enum BorrowTypeID {
     None,
     Ref,

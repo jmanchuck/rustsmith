@@ -56,7 +56,7 @@ impl StructTemplate {
         for (field_name, field_type) in self.fields.iter() {
             field_list.push_str(format!("{}: {},\n", field_name, field_type.to_string()).as_str());
         }
-        let derive_string = if self.derive.len() > 0 {
+        let derive_string = if !self.derive.is_empty() {
             format!("#[derive({})]\n", self.derive.join(", "))
         } else {
             String::new()

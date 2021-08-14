@@ -26,11 +26,8 @@ impl ToString for FunctionCallExpr {
         let func_name = self.function_template.get_name();
 
         for i in 0..self.arguments.len() {
-            let arg_string = format!(
-                "{}",
-                // params[i].get_borrow_type().to_string(),
-                self.arguments[i].to_string()
-            );
+            let arg_string = self.arguments[i].to_string();
+
             result.push(arg_string);
         }
 

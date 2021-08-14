@@ -3,12 +3,6 @@ use crate::program::var::Var;
 use super::arithmetic_expr::ArithmeticExpr;
 use super::{expr::Expr, func_call_expr::FunctionCallExpr};
 
-use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
-
-#[derive(EnumDiscriminants)]
-#[strum_discriminants(vis(pub))]
-#[strum_discriminants(name(BoolExprVariants))]
-#[strum_discriminants(derive(EnumCount, EnumIter))]
 pub enum BoolExpr {
     Bool(BoolValue),
     Binary(Box<BinBoolExpr>),
@@ -33,6 +27,16 @@ impl ToString for BoolExpr {
             Self::Negation(s) => (*s).to_string(),
             Self::Var(s) => s.to_string(),
             Self::Func(s) => s.to_string(),
+        }
+    }
+}
+
+impl From<Expr> for BoolExpr {
+    fn from(expr: Expr) -> Self {
+        if let Expr::Boolean(result) = expr {
+            result
+        } else {
+            panic!("Could not perform conversion from Expr to BoolExpr")
         }
     }
 }

@@ -38,10 +38,10 @@ impl BlockStmt {
 
         for stmt in self.stmts.iter() {
             string.push_str(&stmt.to_string()[..]);
-            string.push_str("\n");
+            string.push('\n');
         }
 
-        string.push_str("}");
+        string.push('}');
 
         string
     }

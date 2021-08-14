@@ -151,7 +151,7 @@ impl Param {
     }
 
     pub fn get_borrow_type(&self) -> BorrowTypeID {
-        self.borrow_type.clone()
+        self.borrow_type
     }
 }
 
