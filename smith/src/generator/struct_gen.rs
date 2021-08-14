@@ -42,7 +42,7 @@ impl StructTable {
         }
         self.has_global = true;
         let name = GLOBAL_STRUCT_NAME.to_string();
-        let mut struct_template = StructTemplate::new(name.clone());
+        let mut struct_template = StructTemplate::new(name);
         let mut field_name_gen = NameGenerator::new(String::from("field_"));
 
         for _ in 0..NUM_GLOBAL_STRUCT_FIELDS {
@@ -65,7 +65,7 @@ impl StructTable {
             .insert(struct_template.get_name(), struct_template);
     }
 
-    pub fn flatten_struct(&self, struct_name: &String) -> Vec<(String, TypeID)> {
+    pub fn flatten_struct(&self, struct_name: &str) -> Vec<(String, TypeID)> {
         let struct_template = self
             .get_struct_template(&struct_name)
             .unwrap_or_else(|| panic!("Could not find struct template"));
@@ -100,7 +100,7 @@ impl StructTable {
     pub fn gen_struct<R: Rng>(&mut self, rng: &mut R) -> StructTemplate {
         let name = self.names.next().unwrap();
         let mut field_name_gen = NameGenerator::new(String::from("field_"));
-        let mut struct_template = StructTemplate::new(name.clone());
+        let mut struct_template = StructTemplate::new(name);
 
         while rng.gen_range(0.0..1.0)
             > struct_template.num_fields() as f32 / MAX_STRUCT_FIELDS as f32
@@ -133,7 +133,7 @@ impl StructTable {
         struct_templates.choose(rng).unwrap().clone()
     }
 
-    pub fn get_struct_template(&self, name: &String) -> Option<StructTemplate> {
+    pub fn get_struct_template(&self, name: &str) -> Option<StructTemplate> {
         match self.structs.get(name) {
             Some(struct_template) => Some(struct_template.clone()),
             None => match &self.global_struct {

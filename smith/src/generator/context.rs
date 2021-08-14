@@ -1,6 +1,5 @@
 use std::{cell::RefCell, rc::Rc};
 
-use super::super::program::stmt::stmt::StmtVariants;
 use super::scope::Scope;
 pub struct Context {
     pub scope: Rc<RefCell<Scope>>,
@@ -9,7 +8,6 @@ pub struct Context {
     pub arith_expr_depth: u32,
     pub bool_expr_depth: u32,
     pub if_depth: u32,
-    pub stmt_type: Vec<StmtVariants>,
 }
 
 impl Context {
@@ -33,10 +31,8 @@ impl Context {
         self.scope = parent;
     }
 
-    pub fn reset_expr_depths(&mut self) {
-        self.loop_depth = 0;
+    pub fn reset_expr_depth(&mut self) {
         self.expr_depth = 0;
-        self.if_depth = 0;
         self.arith_expr_depth = 0;
         self.bool_expr_depth = 0;
     }
@@ -51,7 +47,6 @@ impl Default for Context {
             if_depth: 0,
             arith_expr_depth: 0,
             bool_expr_depth: 0,
-            stmt_type: Vec::new(),
         }
     }
 }

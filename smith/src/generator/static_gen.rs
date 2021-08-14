@@ -23,7 +23,7 @@ impl StaticGenerator {
         let static_int = ExprGenerator::int32(rng);
         let var_name = self.name_gen.next().unwrap();
         scope.borrow_mut().insert(
-            &var_name.clone(),
+            &var_name,
             VarScopeEntry::new(static_int.get_type(), var_name.clone(), false).as_scope_entry(),
         );
 

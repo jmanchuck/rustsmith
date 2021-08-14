@@ -50,24 +50,15 @@ impl ScopeEntry {
     }
 
     pub fn is_var(&self) -> bool {
-        match self {
-            Self::Var(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Var(_))
     }
 
     pub fn is_func(&self) -> bool {
-        match self {
-            Self::Func(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Func(_))
     }
 
     pub fn is_struct(&self) -> bool {
-        match self {
-            Self::Struct(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Struct(_))
     }
 }
 
@@ -150,14 +141,18 @@ impl StructScopeEntry {
         struct_template: StructTemplate,
         struct_table: &StructTable,
     ) -> Self {
-        let borrow_type = param.get_borrow_type();
         let is_mut = param.get_borrow_type() == BorrowTypeID::MutRef;
+        let field_borrow_type = if param.get_borrow_type() != BorrowTypeID::Ref {
+            BorrowTypeID::None
+        } else {
+            BorrowTypeID::Ref
+        };
 
         let mut fields_map: BTreeMap<String, Rc<ScopeEntry>> = BTreeMap::new();
         for (field_name, field_type) in struct_template.fields_iter() {
             let scope_entry = match field_type {
                 TypeID::StructType(struct_name) => StructScopeEntry::new(
-                    BorrowTypeID::None,
+                    field_borrow_type,
                     struct_table.get_struct_template(struct_name).unwrap(),
                     struct_table,
                     is_mut,
@@ -171,7 +166,7 @@ impl StructScopeEntry {
 
         StructScopeEntry {
             type_id: struct_template.get_type(),
-            borrow_type,
+            borrow_type: param.get_borrow_type(),
             struct_template,
             fields_map,
             is_mut,
@@ -187,7 +182,7 @@ impl StructScopeEntry {
     }
 
     pub fn get_borrow_type(&self) -> BorrowTypeID {
-        self.borrow_type.clone()
+        self.borrow_type
     }
 
     pub fn get_field_entries(&self) -> BTreeMap<String, Rc<ScopeEntry>> {

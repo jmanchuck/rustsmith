@@ -12,16 +12,7 @@ mod stmt_gen;
 pub mod struct_gen;
 pub mod weights;
 
-#[allow(dead_code)]
-mod consts {
-    pub const MAX_EXPR_DEPTH: u32 = 10;
-    pub const MAX_ARITH_EXPR_DEPTH: u32 = 10;
-    pub const MAX_BOOL_EXPR_DEPTH: u32 = 10;
-    pub const MAX_STATICS: u32 = 2;
-    pub const MAX_STRUCTS: u32 = 2;
-    pub const MAX_FUNCS: u32 = 4;
-    pub const MAX_FUNC_PARAMS: u32 = 4;
-}
+mod consts;
 
 #[cfg(test)]
 mod test {

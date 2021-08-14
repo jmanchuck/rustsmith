@@ -187,6 +187,7 @@ impl Scope {
             _ => (),
         }
     }
+
     pub fn borrow_count(&self, entry_name: &String) -> usize {
         match self.borrows.get(entry_name) {
             Some(borrow_context) => borrow_context.get_borrows().len(),
@@ -211,7 +212,7 @@ impl Scope {
         }
     }
 
-    pub fn lookup(&self, entry_name: &String) -> Option<(Rc<ScopeEntry>, BorrowStatus)> {
+    pub fn lookup(&self, entry_name: &str) -> Option<(Rc<ScopeEntry>, BorrowStatus)> {
         match self.get_all_entries().get(entry_name) {
             Some(entry) => Some(entry.clone()),
             None => None,
@@ -314,7 +315,7 @@ impl Scope {
     where
         T: Fn(&String, Rc<ScopeEntry>, BorrowStatus) -> bool,
     {
-        self.filter_with_closure_full(filter).len() > 0
+        !self.filter_with_closure_full(filter).is_empty()
     }
 
     pub fn filter_with_closure_full<T>(
@@ -333,7 +334,8 @@ impl Scope {
 
         result
     }
-    pub fn can_move_entry(&self, entry_name: &String) -> bool {
+
+    pub fn can_move_entry(&self, entry_name: &str) -> bool {
         match self.lookup(entry_name) {
             Some((scope_entry, borrow_status)) => {
                 let parent_entry_name = string_before_first_period(entry_name);
@@ -416,7 +418,7 @@ impl Scope {
     }
 }
 
-fn string_before_first_period(s: &String) -> String {
+fn string_before_first_period(s: &str) -> String {
     let s = s.to_string();
     let period_idx = match s.find('.') {
         Some(idx) => idx,
@@ -621,7 +623,6 @@ mod test {
         ];
         let struct_b_template = StructTemplate::new_from_fields("B".to_string(), struct_b_fields);
 
-        let struct_a_type = TypeID::StructType("A".to_string());
         let struct_a_fields = vec![
             ("field1".to_string(), struct_b_type.clone()),
             ("field2".to_string(), i32_type.clone()),
@@ -640,20 +641,16 @@ mod test {
             StructScopeEntry::new(BorrowTypeID::None, struct_a_template, &struct_table, false)
                 .as_scope_entry();
 
-        let entry_borrower =
-            Var::new(struct_a_type.clone(), var_borrower.clone(), false).as_scope_entry();
-
         // Setup ends here
 
         // Borrow test begins here
         scope.insert(&var_a, entry_a);
 
-        println!("{:#?}", scope.borrows);
-
         let borrow_source = String::from("a.field1.field1");
 
         // Borrow
-        scope.insert_borrow(&var_borrower, entry_borrower, &borrow_source);
+        scope.borrow_entry(&"borrower".to_string(), &borrow_source);
+
         // Borrowed struct fields
         assert_eq!(scope.borrow_count(&var_a), 1);
 
@@ -664,6 +661,13 @@ mod test {
         // Not borrowed struct fields
         assert_eq!(scope.borrow_count(&"a.field2".to_string()), 0);
         assert_eq!(scope.borrow_count(&"a.field1.field2".to_string()), 0);
+
+        // Shouldn't be able to move anything
+        assert!(!scope.can_move_entry(&"a.field1".to_string()));
+        assert!(!scope.can_move_entry(&"a.field1.field1".to_string()));
+        assert!(!scope.can_move_entry(&"a.field1.field1.field1".to_string()));
+        assert!(!scope.can_move_entry(&"a.field2".to_string()));
+        assert!(!scope.can_move_entry(&"a.field1.field2".to_string()));
 
         // Check that removing borrow clears everything
         scope.remove_entry(&var_borrower);
