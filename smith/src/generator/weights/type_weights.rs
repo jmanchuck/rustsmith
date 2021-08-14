@@ -23,7 +23,7 @@ impl Distribution<BorrowTypeID> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BorrowTypeID {
         let choices: Vec<BorrowTypeID> = BorrowTypeID::iter().collect();
 
-        choices.choose(rng).unwrap().clone()
+        *choices.choose(rng).unwrap()
     }
 }
 
@@ -43,23 +43,6 @@ impl Distribution<IntTypeID> for Standard {
         }
     }
 }
-
-// impl Distribution<IntValue> for Standard {
-//     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> IntValue {
-//         match rng.gen_range(0..=9) {
-//             0 => IntValue::I8(0),
-//             1 => IntValue::I16(rng.gen::<i16>()),
-//             2 => IntValue::I32(rng.gen::<i32>()),
-//             3 => IntValue::I64(rng.gen::<i64>()),
-//             4 => IntValue::I128(rng.gen::<i128>()),
-//             5 => IntValue::U8(rng.gen::<u8>()),
-//             6 => IntValue::U16(rng.gen::<u16>()),
-//             7 => IntValue::U32(rng.gen::<u32>()),
-//             8 => IntValue::U64(rng.gen::<u64>()),
-//             _ => IntValue::U128(rng.gen::<u128>()),
-//         }
-//     }
-// }
 
 impl IntValue {
     pub fn rand_from_type<R: Rng>(int_type_id: IntTypeID, rng: &mut R) -> Self {
@@ -139,7 +122,7 @@ impl Distribution<ComparisonOp> for Standard {
 
 impl Distribution<BoolOp> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BoolOp {
-        match rng.gen_range(0..=4) {
+        match rng.gen_range(0..=2) {
             0 => BoolOp::AND,
             _ => BoolOp::OR,
         }
