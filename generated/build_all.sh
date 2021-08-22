@@ -22,8 +22,6 @@ do
         do
             filename=$(basename $file)
             cargo build --bins --release --target-dir ./"$opt_level"/
-            # cargo build --bins --target-dir .
-            # cargo +nightly build --bins --profile optS --target-dir . -Z unstable-options
         done
 done
 

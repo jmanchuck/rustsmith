@@ -13,8 +13,12 @@ do
     for file in ./release/*;
     do 
         if [[ -f $file && -x $file ]]; then
-            output=$(./$file)
-            echo "\"$(basename $file)\": $output" >> ../output.json
+            output=$(timeout 1s ./$file)
+            if test -z "$output"; then 
+                echo "\"$(basename $file)\": {\"timedout\": -1}" >> ../output.json
+            else
+                echo "\"$(basename $file)\": $output" >> ../output.json
+            fi
             echo "," >> ../output.json
         fi
     done
