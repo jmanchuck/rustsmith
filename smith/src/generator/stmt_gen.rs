@@ -11,7 +11,8 @@ use crate::{
         },
         stmt::{
             assign_stmt::AssignStmt, block_stmt::BlockStmt, conditional_stmt::ConditionalStmt,
-            expr_stmt::ExprStmt, let_stmt::LetStmt, return_stmt::ReturnStmt, stmt::Stmt,
+            expr_stmt::ExprStmt, let_stmt::LetStmt, op_assign_stmt::OpAssignStmt,
+            return_stmt::ReturnStmt, stmt::Stmt,
         },
         struct_template::StructTemplate,
         types::{BorrowTypeID, IntTypeID, TypeID},
@@ -133,6 +134,15 @@ impl<'a> StmtGenerator<'a> {
             StmtVariants::AssignStatement => {
                 if context.borrow().scope.borrow().mut_count() > 0 {
                     Some(self.assign_stmt(context, rng).as_stmt())
+                } else {
+                    None
+                }
+            }
+            StmtVariants::OpAssignStatement => {
+                let filters = Filters::new()
+                    .with_filters(vec![is_mut_or_mut_ref_filter(), is_int_type_filter()]);
+                if !filters.filter(&context.borrow().scope).is_empty() {
+                    Some(self.op_assign_stmt(context, rng).as_stmt())
                 } else {
                     None
                 }
@@ -338,6 +348,33 @@ impl<'a> StmtGenerator<'a> {
         context.borrow_mut().if_depth -= 1;
 
         ConditionalStmt::new_from_vec(conditional_blocks, else_body)
+    }
+
+    pub fn op_assign_stmt<R: Rng>(
+        &mut self,
+        context: Rc<RefCell<Context>>,
+        rng: &mut R,
+    ) -> OpAssignStmt {
+        let filters =
+            Filters::new().with_filters(vec![is_mut_or_mut_ref_filter(), is_int_type_filter()]);
+
+        let var_list = filters.filter(&context.borrow().scope);
+        let (var_name, (scope_entry, _)) = var_list.choose(rng).unwrap();
+        let type_id = scope_entry.get_type();
+
+        let generator = ExprGenerator::new(
+            &self.struct_table,
+            context.clone(),
+            type_id.clone(),
+            BorrowTypeID::None,
+        );
+
+        context.borrow_mut().reset_expr_depth();
+        let expr = generator.expr(rng).into();
+
+        let op = rng.gen();
+        let lhs_var = Var::new(type_id, var_name.clone(), false);
+        OpAssignStmt::new(lhs_var, expr, op)
     }
 
     pub fn global_struct_stmt<R: Rng>(

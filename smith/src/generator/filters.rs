@@ -23,6 +23,13 @@ pub fn is_type_filter(type_id: TypeID) -> ScopeBorrowClosure {
     Box::new(move |scope_entry, _| scope_entry.is_type(type_id.clone()))
 }
 
+pub fn is_int_type_filter() -> ScopeBorrowClosure {
+    Box::new(move |scope_entry, _| match scope_entry.get_type() {
+        TypeID::IntType(_) => true,
+        _ => false,
+    })
+}
+
 pub fn is_borrow_type_filter(borrow_type_id: BorrowTypeID) -> ScopeBorrowClosure {
     Box::new(move |scope_entry, _| scope_entry.is_borrow_type(borrow_type_id.clone()))
 }

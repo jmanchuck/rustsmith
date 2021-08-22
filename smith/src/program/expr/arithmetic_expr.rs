@@ -103,6 +103,7 @@ pub enum BinaryOp {
     SUB,
     MUL,
     DIV,
+    MOD,
 }
 
 impl BinaryOp {
@@ -112,6 +113,17 @@ impl BinaryOp {
             BinaryOp::SUB => String::from("safe_sub"),
             BinaryOp::MUL => String::from("safe_mul"),
             BinaryOp::DIV => String::from("safe_div"),
+            BinaryOp::MOD => String::from("safe_modulo"),
+        }
+    }
+
+    pub fn to_string_self_safe(&self) -> String {
+        match self {
+            BinaryOp::ADD => String::from("safe_self_add"),
+            BinaryOp::SUB => String::from("safe_self_sub"),
+            BinaryOp::MUL => String::from("safe_self_mul"),
+            BinaryOp::DIV => String::from("safe_self_div"),
+            BinaryOp::MOD => String::from("safe_self_modulo"),
         }
     }
 }
@@ -122,7 +134,8 @@ impl ToString for BinaryOp {
             Self::ADD => String::from("+"),
             Self::SUB => String::from("-"),
             Self::MUL => String::from("*"),
-            _ => String::from("/"),
+            Self::DIV => String::from("/"),
+            Self::MOD => String::from("%"),
         }
     }
 }

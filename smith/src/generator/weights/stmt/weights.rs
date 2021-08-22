@@ -9,6 +9,7 @@ impl EnumWeights for StmtVariants {
             StmtVariants::ConditionalStatement => 1,
             StmtVariants::AssignStatement => 3,
             StmtVariants::LoopStatement => 1,
+            StmtVariants::OpAssignStatement => 2,
         }
     }
 }

@@ -13,6 +13,7 @@ pub enum StmtVariants {
     ConditionalStatement,
     AssignStatement,
     LoopStatement,
+    OpAssignStatement,
 }
 
 impl Distribution<StmtVariants> for Standard {

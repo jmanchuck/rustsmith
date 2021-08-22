@@ -1,6 +1,7 @@
 use super::{
     assign_stmt::AssignStmt, conditional_stmt::ConditionalStmt, expr_stmt::ExprStmt,
-    let_stmt::LetStmt, return_stmt::ReturnStmt, static_stmt::StaticStmt,
+    let_stmt::LetStmt, op_assign_stmt::OpAssignStmt, return_stmt::ReturnStmt,
+    static_stmt::StaticStmt,
 };
 pub enum Stmt {
     LetStatement(LetStmt),
@@ -10,6 +11,7 @@ pub enum Stmt {
     ReturnStatement(ReturnStmt),
     ExprStatement(ExprStmt),
     LoopStatement(ExprStmt),
+    OpAssignStatement(OpAssignStmt),
 }
 
 impl ToString for Stmt {
@@ -22,6 +24,7 @@ impl ToString for Stmt {
             Self::ReturnStatement(s) => s.to_string(),
             Self::ExprStatement(s) => s.to_string(),
             Self::LoopStatement(s) => s.to_string(),
+            Self::OpAssignStatement(s) => s.to_string(),
         }
     }
 }
