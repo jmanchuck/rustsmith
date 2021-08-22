@@ -362,6 +362,16 @@ impl<'a> StmtGenerator<'a> {
         let (var_name, (scope_entry, _)) = var_list.choose(rng).unwrap();
         let type_id = scope_entry.get_type();
 
+        // What happens in the expr, stays in the expr
+        context.borrow_mut().enter_scope();
+
+        // Borrow the LHS - which only exists temporarily within this RHS expr scope
+        context
+            .borrow()
+            .scope
+            .borrow_mut()
+            .mut_borrow_entry(&"temp_assignment_borrow".to_string(), &var_name);
+
         let generator = ExprGenerator::new(
             &self.struct_table,
             context.clone(),
@@ -371,6 +381,8 @@ impl<'a> StmtGenerator<'a> {
 
         context.borrow_mut().reset_expr_depth();
         let expr = generator.expr(rng).into();
+
+        context.borrow_mut().leave_scope();
 
         let op = rng.gen();
         let lhs_var = Var::new(type_id, var_name.clone(), false);
