@@ -18,6 +18,10 @@ impl FunctionCallExpr {
     pub fn get_type(&self) -> TypeID {
         self.function_template.get_type()
     }
+
+    pub fn as_expr(self) -> Expr {
+        Expr::Func(self)
+    }
 }
 
 impl ToString for FunctionCallExpr {

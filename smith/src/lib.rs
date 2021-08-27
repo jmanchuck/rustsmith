@@ -9,7 +9,9 @@ pub fn generate_from_seed(seed: u64) -> String {
     let mut rng = StdRng::seed_from_u64(seed);
 
     let warning_macro = String::from("#![allow(warnings)]\n");
-    let imports = String::from("use serde::Serialize;\nuse serde_json::Serializer;\nuse runtime::safe_ops::SafeArithmetic;\n");
+    let imports = String::from(
+        "use serde::Serialize;\nuse serde_json::Serializer;\nuse runtime::{ops::BitArithmetic, safe_ops::SafeArithmetic};\n",
+    );
     let main = main_gen::gen_main(&mut rng);
 
     let code = format!("{}{}{}", warning_macro, imports, main);

@@ -98,12 +98,9 @@ impl IntValue {
 
 impl Distribution<BinaryOp> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BinaryOp {
-        match rng.gen_range(0..=3) {
-            0 => BinaryOp::ADD,
-            1 => BinaryOp::SUB,
-            2 => BinaryOp::MUL,
-            _ => BinaryOp::DIV,
-        }
+        let choices: Vec<BinaryOp> = BinaryOp::iter().collect();
+
+        *choices.choose(rng).unwrap()
     }
 }
 
@@ -126,5 +123,26 @@ impl Distribution<BoolOp> for Standard {
             0 => BoolOp::AND,
             _ => BoolOp::OR,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use rand::Rng;
+
+    use crate::program::expr::arithmetic_expr::BinaryOp;
+
+    #[test]
+    fn binary_op_ratios() {
+        let mut i = 1;
+        for _ in 0..10000 {
+            let bin_op: BinaryOp = rand::thread_rng().gen();
+            match bin_op {
+                BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => i += 1,
+                _ => (),
+            }
+        }
+
+        // println!("{}/10000", i);
     }
 }

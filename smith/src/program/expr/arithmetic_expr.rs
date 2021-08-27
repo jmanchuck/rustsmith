@@ -3,6 +3,7 @@ use crate::program::{
     types::{IntTypeID, TypeID},
     var::Var,
 };
+use strum_macros::EnumIter;
 
 pub enum ArithmeticExpr {
     Int(IntExpr),
@@ -55,6 +56,18 @@ impl From<Expr> for ArithmeticExpr {
     }
 }
 
+impl From<FunctionCallExpr> for ArithmeticExpr {
+    fn from(expr: FunctionCallExpr) -> Self {
+        ArithmeticExpr::Func(expr)
+    }
+}
+
+impl From<Var> for ArithmeticExpr {
+    fn from(expr: Var) -> Self {
+        ArithmeticExpr::Var(expr)
+    }
+}
+
 pub struct BinaryExpr {
     left: ArithmeticExpr,
     right: ArithmeticExpr,
@@ -78,12 +91,15 @@ impl BinaryExpr {
         // This has the form of 5.checked_add(6u8) where 5 and 6 are literal u8 expressions
         // The annotation is only required when a literal is provided as argument
         // The checked arithmetic operations require type annotations in the argument
-        format!(
-            "{}.{}({})",
-            self.left.to_string(),
-            self.op.to_string_safe(),
-            self.right.to_string(),
-        )
+        match self.op {
+            BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => self.to_string(),
+            _ => format!(
+                "{}.{}({})",
+                self.left.to_string(),
+                self.op.to_string_safe(),
+                self.right.to_string(),
+            ),
+        }
     }
 }
 
@@ -98,12 +114,16 @@ impl ToString for BinaryExpr {
     }
 }
 
+#[derive(Copy, Clone, EnumIter)]
 pub enum BinaryOp {
     ADD,
     SUB,
     MUL,
     DIV,
     MOD,
+    BITAND,
+    BITOR,
+    BITXOR,
 }
 
 impl BinaryOp {
@@ -114,6 +134,9 @@ impl BinaryOp {
             BinaryOp::MUL => String::from("safe_mul"),
             BinaryOp::DIV => String::from("safe_div"),
             BinaryOp::MOD => String::from("safe_modulo"),
+            BinaryOp::BITAND => String::from("bit_and"),
+            BinaryOp::BITOR => String::from("bit_or"),
+            BinaryOp::BITXOR => String::from("bit_xor"),
         }
     }
 
@@ -124,6 +147,9 @@ impl BinaryOp {
             BinaryOp::MUL => String::from("safe_self_mul"),
             BinaryOp::DIV => String::from("safe_self_div"),
             BinaryOp::MOD => String::from("safe_self_modulo"),
+            BinaryOp::BITAND => String::from("bit_self_and"),
+            BinaryOp::BITOR => String::from("bit_self_or"),
+            BinaryOp::BITXOR => String::from("bit_self_xor"),
         }
     }
 }
@@ -131,11 +157,14 @@ impl BinaryOp {
 impl ToString for BinaryOp {
     fn to_string(&self) -> String {
         match self {
-            Self::ADD => String::from("+"),
-            Self::SUB => String::from("-"),
-            Self::MUL => String::from("*"),
-            Self::DIV => String::from("/"),
-            Self::MOD => String::from("%"),
+            BinaryOp::ADD => String::from("+"),
+            BinaryOp::SUB => String::from("-"),
+            BinaryOp::MUL => String::from("*"),
+            BinaryOp::DIV => String::from("/"),
+            BinaryOp::MOD => String::from("%"),
+            BinaryOp::BITAND => String::from("&"),
+            BinaryOp::BITOR => String::from("|"),
+            BinaryOp::BITXOR => String::from("^"),
         }
     }
 }

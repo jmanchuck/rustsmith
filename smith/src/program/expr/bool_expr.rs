@@ -41,6 +41,18 @@ impl From<Expr> for BoolExpr {
     }
 }
 
+impl From<FunctionCallExpr> for BoolExpr {
+    fn from(expr: FunctionCallExpr) -> Self {
+        BoolExpr::Func(expr)
+    }
+}
+
+impl From<Var> for BoolExpr {
+    fn from(expr: Var) -> Self {
+        BoolExpr::Var(expr)
+    }
+}
+
 pub struct BoolValue {
     value: bool,
 }

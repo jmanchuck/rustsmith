@@ -1,3 +1,4 @@
+pub mod ops;
 pub mod safe_ops;
 
 #[cfg(test)]

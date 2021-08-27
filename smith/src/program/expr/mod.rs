@@ -3,7 +3,6 @@ pub mod array_expr;
 pub mod bool_expr;
 pub mod borrow_expr;
 pub mod expr;
-pub mod for_loop_expr;
 pub mod func_call_expr;
 pub mod iter_expr;
 pub mod rc_expr;

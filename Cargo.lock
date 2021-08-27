@@ -229,7 +229,7 @@ name = "runtime"
 version = "0.1.0"
 
 [[package]]
-name = "rust_smith"
+name = "rustsmith"
 version = "0.1.0"
 
 [[package]]

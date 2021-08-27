@@ -6,13 +6,15 @@ use crate::{
     generator::filters::*,
     program::{
         expr::{
-            arithmetic_expr::ArithmeticExpr, bool_expr::BoolExpr, expr::RawExpr,
-            for_loop_expr::ForLoopExpr, iter_expr::IterRange,
+            arithmetic_expr::{ArithmeticExpr, BinaryOp, IntExpr},
+            bool_expr::{BoolExpr, ComparisonExpr, ComparisonOp},
+            expr::RawExpr,
+            iter_expr::IterRange,
         },
         stmt::{
             assign_stmt::AssignStmt, block_stmt::BlockStmt, conditional_stmt::ConditionalStmt,
-            expr_stmt::ExprStmt, let_stmt::LetStmt, op_assign_stmt::OpAssignStmt,
-            return_stmt::ReturnStmt, stmt::Stmt,
+            expr_stmt::ExprStmt, for_loop_stmt::ForLoopStmt, let_stmt::LetStmt,
+            op_assign_stmt::OpAssignStmt, return_stmt::ReturnStmt, stmt::Stmt,
         },
         struct_template::StructTemplate,
         types::{BorrowTypeID, IntTypeID, TypeID},
@@ -49,7 +51,12 @@ impl<'a> StmtGenerator<'a> {
         let mut stmt_list: Vec<Stmt> = Vec::new();
 
         for _ in 0..consts::MAX_STMTS_IN_BLOCK {
-            let stmt = self.stmt(Rc::clone(&context), rng);
+            let mut stmt = self.stmt(Rc::clone(&context), rng);
+            if let Stmt::LoopStatement(for_loop_stmt) = &mut stmt {
+                if rng.gen::<f32>() < consts::PROB_MAX_FOR_LOOP_ITERS {
+                    self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
+                }
+            }
             stmt_list.push(stmt);
         }
 
@@ -68,7 +75,12 @@ impl<'a> StmtGenerator<'a> {
             vec![self.global_struct_stmt(struct_template, Rc::clone(&context), rng)];
 
         for _ in 0..consts::MAX_STMTS_IN_BLOCK {
-            let stmt = self.stmt(Rc::clone(&context), rng);
+            let mut stmt = self.stmt(Rc::clone(&context), rng);
+            if let Stmt::LoopStatement(for_loop_stmt) = &mut stmt {
+                if rng.gen::<f32>() < consts::PROB_MAX_FOR_LOOP_ITERS {
+                    self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
+                }
+            }
             stmt_list.push(stmt);
         }
 
@@ -154,6 +166,7 @@ impl<'a> StmtGenerator<'a> {
                     None
                 }
             }
+            StmtVariants::FuncCallStatement => Some(self.func_call_stmt(context, rng).as_stmt()),
         }
     }
 
@@ -174,6 +187,7 @@ impl<'a> StmtGenerator<'a> {
 
     pub fn let_stmt<R: Rng>(&mut self, context: Rc<RefCell<Context>>, rng: &mut R) -> LetStmt {
         let rand_type_id = self.struct_table.rand_type(rng);
+        let rand_borrow_type_id: BorrowTypeID = rng.gen();
 
         // TODO: Allow let statements for mutable and immutable references
         let expr_generator = ExprGenerator::new(
@@ -222,11 +236,46 @@ impl<'a> StmtGenerator<'a> {
         LetStmt::new(var, expr)
     }
 
+    // Takes the stmt list being generated, inserts an initialiser variable
+    // Insert a conditional statement into loop to check if initialiser variable > max
+    // Insert an increment statement into loop at the end
+    fn inject_loop_stopper(&mut self, stmt_list: &mut Vec<Stmt>, loop_stmt: &mut ForLoopStmt) {
+        let counter_name = self.var_name_gen.next().unwrap();
+        let counter_var = Var::new(IntTypeID::U32.as_type(), counter_name, true);
+        let counter_val = IntExpr::new_u32(0).as_expr();
+        let counter_let_stmt = LetStmt::new(counter_var.clone(), counter_val).as_stmt();
+
+        stmt_list.push(counter_let_stmt);
+
+        let comparison_val = IntExpr::new_u32(consts::MAX_FOR_LOOP_ITERS);
+        let comparison_expr = ComparisonExpr::new(
+            counter_var.clone().into(),
+            comparison_val.as_arith_expr(),
+            ComparisonOp::Greater,
+        )
+        .as_bool_expr();
+        let break_block = BlockStmt::new_from_vec(vec![ExprStmt::new(
+            RawExpr::new("break".to_string()).as_expr(),
+        )
+        .as_stmt()]);
+        let mut loop_break_stmt = ConditionalStmt::new();
+        loop_break_stmt.insert_conditional(comparison_expr, break_block);
+
+        let increment_stmt = OpAssignStmt::new(
+            counter_var,
+            IntExpr::new_u32(1).as_arith_expr(),
+            BinaryOp::ADD,
+        );
+
+        loop_stmt.push_stmt(loop_break_stmt.as_stmt());
+        loop_stmt.push_stmt(increment_stmt.as_stmt());
+    }
+
     pub fn for_loop_stmt<R: Rng>(
         &mut self,
         context: Rc<RefCell<Context>>,
         rng: &mut R,
-    ) -> ExprStmt {
+    ) -> ForLoopStmt {
         let rand_int_type: IntTypeID = rand::random();
         let rand_type = rand_int_type.as_type();
 
@@ -251,10 +300,10 @@ impl<'a> StmtGenerator<'a> {
 
         let block_stmt = self.block_stmt(Rc::clone(&context), rng);
 
-        let for_loop_expr = ForLoopExpr::new(rand_type, var, iter_expr, block_stmt);
+        let for_loop_stmt = ForLoopStmt::new(rand_type, var, iter_expr, block_stmt);
         context.borrow_mut().loop_depth -= 1;
 
-        ExprStmt::new(for_loop_expr.as_expr())
+        for_loop_stmt
     }
 
     pub fn assign_stmt<R: Rng>(
@@ -426,5 +475,33 @@ impl<'a> StmtGenerator<'a> {
         );
 
         LetStmt::new(left_var, expr).as_stmt()
+    }
+
+    pub fn func_call_stmt<R: Rng>(&self, context: Rc<RefCell<Context>>, rng: &mut R) -> ExprStmt {
+        let filters = Filters::new().with_filters(vec![is_func_filter()]);
+
+        let choice = filters.filter(&context.borrow().scope).choose(rng).unwrap();
+
+        let (_, (entry, _)) = choice;
+
+        let func_entry;
+
+        if let ScopeEntry::Func(f_entry) = entry.as_ref() {
+            func_entry = f_entry;
+        } else {
+            panic!("Filter did not return func entry");
+        }
+
+        let expr_generator = ExprGenerator::new(
+            self.struct_table,
+            Rc::clone(&context),
+            TypeID::NullType,
+            BorrowTypeID::None,
+        );
+
+        let func_call_expr =
+            expr_generator.func_call_expr_from_template(func_entry.get_template(), rng);
+
+        ExprStmt::new(func_call_expr.as_expr())
     }
 }

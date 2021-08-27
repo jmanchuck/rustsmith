@@ -30,7 +30,7 @@ impl OpAssignStmt {
             "{}.{}({});",
             self.left.to_string(),
             self.op.to_string_self_safe(),
-            self.right.to_string()
+            self.right.to_string(),
         )
     }
 }

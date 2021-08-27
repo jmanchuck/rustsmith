@@ -1,7 +1,7 @@
 use super::{
     assign_stmt::AssignStmt, conditional_stmt::ConditionalStmt, expr_stmt::ExprStmt,
-    let_stmt::LetStmt, op_assign_stmt::OpAssignStmt, return_stmt::ReturnStmt,
-    static_stmt::StaticStmt,
+    for_loop_stmt::ForLoopStmt, let_stmt::LetStmt, op_assign_stmt::OpAssignStmt,
+    return_stmt::ReturnStmt, static_stmt::StaticStmt,
 };
 pub enum Stmt {
     LetStatement(LetStmt),
@@ -10,7 +10,7 @@ pub enum Stmt {
     AssignStatement(AssignStmt),
     ReturnStatement(ReturnStmt),
     ExprStatement(ExprStmt),
-    LoopStatement(ExprStmt),
+    LoopStatement(ForLoopStmt),
     OpAssignStatement(OpAssignStmt),
 }
 

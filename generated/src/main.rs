@@ -22,7 +22,7 @@ fn main() {
 
 pub fn get_args() -> ArgMatches<'static> {
     App::new("RustSmith")
-        .version("0.1.0")
+        .version("0.3.0")
         .author("JJ <jjcheung0000@gmail.com>")
         .about("Rust program generator")
         .arg(

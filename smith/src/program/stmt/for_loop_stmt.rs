@@ -1,18 +1,21 @@
-use crate::program::{stmt::block_stmt::BlockStmt, types::TypeID, var::Var};
-
-use super::{expr::Expr, iter_expr::IterExpr};
+use crate::program::{
+    expr::iter_expr::IterExpr,
+    stmt::{block_stmt::BlockStmt, stmt::Stmt},
+    types::TypeID,
+    var::Var,
+};
 
 // TypeID is for the loop's iter expression
-pub struct ForLoopExpr {
+pub struct ForLoopStmt {
     type_id: TypeID,
     iter_var: Var,
     iterable: IterExpr,
     block_stmt: BlockStmt,
 }
 
-impl ForLoopExpr {
+impl ForLoopStmt {
     pub fn new(type_id: TypeID, iter_var: Var, iterable: IterExpr, block_stmt: BlockStmt) -> Self {
-        ForLoopExpr {
+        ForLoopStmt {
             type_id,
             iter_var,
             iterable,
@@ -24,12 +27,16 @@ impl ForLoopExpr {
         self.type_id.clone()
     }
 
-    pub fn as_expr(self) -> Expr {
-        Expr::Loop(Box::new(self))
+    pub fn as_stmt(self) -> Stmt {
+        Stmt::LoopStatement(self)
+    }
+
+    pub fn push_stmt(&mut self, stmt: Stmt) {
+        self.block_stmt.push(stmt);
     }
 }
 
-impl ToString for ForLoopExpr {
+impl ToString for ForLoopStmt {
     fn to_string(&self) -> String {
         format!(
             "for {} in {} {}",
@@ -59,7 +66,7 @@ mod test {
 
         let block_stmt = BlockStmt::new();
 
-        let for_loop_expr = ForLoopExpr::new(IntTypeID::I8.as_type(), var, iter_expr, block_stmt);
+        let for_loop_expr = ForLoopStmt::new(IntTypeID::I8.as_type(), var, iter_expr, block_stmt);
 
         println!("{}", for_loop_expr.to_string());
 

@@ -30,6 +30,8 @@ def has_differential(row):
     else:
         return False
 
+print(f"Found {len(df)} runs")
+
 print("Number of timeouts:")
 print(df.isna().sum(axis=0))
 

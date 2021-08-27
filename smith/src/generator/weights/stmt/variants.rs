@@ -14,6 +14,7 @@ pub enum StmtVariants {
     AssignStatement,
     LoopStatement,
     OpAssignStatement,
+    FuncCallStatement,
 }
 
 impl Distribution<StmtVariants> for Standard {
