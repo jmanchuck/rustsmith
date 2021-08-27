@@ -166,7 +166,18 @@ impl<'a> StmtGenerator<'a> {
                     None
                 }
             }
-            StmtVariants::FuncCallStatement => Some(self.func_call_stmt(context, rng).as_stmt()),
+            StmtVariants::FuncCallStatement => {
+                if context
+                    .borrow()
+                    .scope
+                    .borrow()
+                    .contains_filter(is_func_filter())
+                {
+                    Some(self.func_call_stmt(context, rng).as_stmt())
+                } else {
+                    None
+                }
+            }
         }
     }
 
