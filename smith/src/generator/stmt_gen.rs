@@ -479,8 +479,8 @@ impl<'a> StmtGenerator<'a> {
 
     pub fn func_call_stmt<R: Rng>(&self, context: Rc<RefCell<Context>>, rng: &mut R) -> ExprStmt {
         let filters = Filters::new().with_filters(vec![is_func_filter()]);
-
-        let choice = filters.filter(&context.borrow().scope).choose(rng).unwrap();
+        let func_list = filters.filter(&context.borrow().scope);
+        let choice = func_list.choose(rng).unwrap();
 
         let (_, (entry, _)) = choice;
 

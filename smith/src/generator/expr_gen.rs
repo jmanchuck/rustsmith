@@ -19,11 +19,7 @@ use crate::program::{
 use rand::{seq::SliceRandom, Rng};
 
 use super::{
-    consts,
-    context::Context,
-    filters::*,
-    scope_entry::{FuncScopeEntry, ScopeEntry},
-    struct_gen::StructTable,
+    consts, context::Context, filters::*, scope_entry::ScopeEntry, struct_gen::StructTable,
     weights::expr::variants::*,
 };
 
@@ -402,11 +398,11 @@ impl<'table> ExprGenerator<'table> {
 
     // Assumes that the function with the correct type already exists
     fn func_call_expr<R: Rng>(&self, rng: &mut R) -> Option<FunctionCallExpr> {
-        let filter = Filters::new()
+        let filters = Filters::new()
             .with_filters(vec![is_func_filter(), is_type_filter(self.type_id.clone())]);
 
         let func_list: Vec<(String, (Rc<ScopeEntry>, BorrowStatus))> =
-            filter.filter(&self.context.borrow().scope);
+            filters.filter(&self.context.borrow().scope);
 
         let choice = func_list.choose(rng);
 

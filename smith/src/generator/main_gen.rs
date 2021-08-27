@@ -19,7 +19,7 @@ pub fn gen_main<R: Rng>(rng: &mut R) -> String {
 
     let mut struct_table = StructTable::new();
 
-    let static_struct_template = struct_table.gen_global_struct();
+    let static_struct_template = struct_table.gen_global_struct(rng);
 
     program.push_struct_template(static_struct_template);
     loop {

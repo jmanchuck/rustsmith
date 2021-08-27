@@ -36,7 +36,7 @@ impl StructTable {
     }
 
     // We don't want this type to be INSTANTIATED, but we want it to be passed around as function arguments
-    pub fn gen_global_struct(&mut self) -> StructTemplate {
+    pub fn gen_global_struct<R: Rng>(&mut self, rng: &mut R) -> StructTemplate {
         if self.has_global {
             panic!("Attempting to create another 'global' struct");
         }
@@ -46,7 +46,8 @@ impl StructTable {
         let mut field_name_gen = NameGenerator::new(String::from("field_"));
 
         for _ in 0..NUM_GLOBAL_STRUCT_FIELDS {
-            struct_template.insert_field(field_name_gen.next().unwrap(), IntTypeID::I32.as_type());
+            let rand_int_type: IntTypeID = rng.gen();
+            struct_template.insert_field(field_name_gen.next().unwrap(), rand_int_type.as_type());
         }
 
         struct_template.insert_derive_attribute(String::from("Serialize"));
