@@ -26,7 +26,7 @@ def can_differential(row):
 
 def has_differential(row):
     if can_differential(row):
-        return np.nanmin(row) != np.nanmax(row)
+        return row.min() != row.max()
     else:
         return False
 
