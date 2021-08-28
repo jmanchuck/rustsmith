@@ -200,27 +200,30 @@ impl<'a> StmtGenerator<'a> {
         let rand_type_id = self.struct_table.rand_type(rng);
         let rand_borrow_type_id: BorrowTypeID = rng.gen();
 
-        // TODO: Allow let statements for mutable and immutable references
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&context),
             rand_type_id.clone(),
-            BorrowTypeID::None,
+            rand_borrow_type_id,
         );
 
         // TODO: make this a better random choice to choose whether mutable variable or not
-        let is_mut = rng.gen_bool(0.5);
+        let is_mut = rng.gen_bool(0.5) && rand_borrow_type_id == BorrowTypeID::None;
 
         // LHS of the let statement
-        let var = Var::new(
+        let var = Var::new_with_borrow(
             rand_type_id.clone(),
+            rand_borrow_type_id,
             self.var_name_gen.next().unwrap(),
             is_mut,
         );
 
         context.borrow_mut().enter_scope();
         context.borrow_mut().reset_expr_depth();
-        let expr = expr_generator.expr(rng);
+        let expr = match rand_borrow_type_id {
+            BorrowTypeID::None => expr_generator.expr(rng),
+            _ => expr_generator.borrow_expr(rng).as_expr(),
+        };
 
         context.borrow_mut().leave_scope();
 
@@ -229,7 +232,7 @@ impl<'a> StmtGenerator<'a> {
         // Insert struct scope entry, which keeps its own flattened fields in a vec
         if let TypeID::StructType(struct_name) = rand_type_id {
             let struct_scope_entry = StructScopeEntry::new(
-                BorrowTypeID::None,
+                rand_borrow_type_id,
                 self.struct_table.get_struct_template(&struct_name).unwrap(),
                 self.struct_table,
                 is_mut,
@@ -342,18 +345,15 @@ impl<'a> StmtGenerator<'a> {
             .borrow_mut()
             .mut_borrow_entry(&"temp_assignment_borrow".to_string(), &var_name);
 
-        let type_id = scope_entry.get_type();
-
-        // TODO: When we allow references as variables, assignment must have the same ref type
-        // For the case of mutable references, we can assign regardless of ref type
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&context),
-            type_id,
+            scope_entry.get_type(),
             BorrowTypeID::None,
         );
 
         context.borrow_mut().reset_expr_depth();
+
         let expr = expr_generator.expr(rng);
 
         let left_var = Var::new(scope_entry.get_type(), var_name.clone(), true);

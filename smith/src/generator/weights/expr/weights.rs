@@ -20,7 +20,7 @@ impl EnumWeights for BoolExprVariants {
             BoolExprVariants::Binary => 4,
             BoolExprVariants::Comparison => 3,
             BoolExprVariants::Negation => 3,
-            BoolExprVariants::Var => 1,
+            BoolExprVariants::Var => 2,
             BoolExprVariants::Func => 2,
         }
     }
@@ -30,7 +30,8 @@ impl EnumWeights for StructExprVariants {
     fn weight(&self) -> u32 {
         match self {
             StructExprVariants::Literal => 1,
-            StructExprVariants::Var => 1,
+            StructExprVariants::Var => 2,
+            StructExprVariants::Func => 1,
         }
     }
 }

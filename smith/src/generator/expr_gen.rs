@@ -101,9 +101,26 @@ impl<'table> ExprGenerator<'table> {
         expr_choice: StructExprVariants,
         rng: &mut R,
     ) -> Option<StructExpr> {
-        let struct_var_filter = self.make_struct_filter();
         match expr_choice {
+            StructExprVariants::Func => {
+                let struct_func_filter = Filters::new()
+                    .with_filters(vec![is_type_filter(self.type_id.clone()), is_func_filter()]);
+
+                if struct_func_filter
+                    .filter(&self.context.borrow().scope)
+                    .len()
+                    > 0
+                {
+                    match self.func_call_expr(rng) {
+                        Some(expr) => Some(StructExpr::Func(expr)),
+                        None => None,
+                    }
+                } else {
+                    None
+                }
+            }
             StructExprVariants::Var => {
+                let struct_var_filter = self.make_struct_filter();
                 if struct_var_filter.filter(&self.context.borrow().scope).len() > 0 {
                     let choice = struct_var_filter
                         .filter(&self.context.borrow().scope)
@@ -371,25 +388,7 @@ impl<'table> ExprGenerator<'table> {
             if param.get_borrow_type() == BorrowTypeID::None {
                 arguments.push(generator.expr(rng));
             } else {
-                let result = generator.borrow_expr(rng);
-
-                match result {
-                    Ok(borrow_exp) => arguments.push(borrow_exp.as_expr()),
-
-                    // If unable to borrow a variable, generate an expression and explicity put a ref on it
-                    Err(_) => {
-                        let explicit_generator =
-                            ExprGenerator::new_sub_expr(self, param.get_type(), BorrowTypeID::None);
-
-                        // TODO: Allow this to use functions and other more complex expressions
-                        //       since literal expr is very constrained
-                        // We're only doing this since we want to avoid picking up a variable that
-                        // we shouldn't be allowed to take a (mut) reference of
-                        let expr = explicit_generator.literal_expr(rng);
-                        arguments
-                            .push(BorrowExpr::new(param.get_borrow_type(), expr, true).as_expr());
-                    }
-                }
+                arguments.push(generator.borrow_expr(rng).as_expr());
             }
         }
 
@@ -421,16 +420,16 @@ impl<'table> ExprGenerator<'table> {
     }
 
     // TODO: Force mutable borrow on global struct? Prevent instantiation
-    fn borrow_expr<R: Rng>(&self, rng: &mut R) -> Result<BorrowExpr, ()> {
+    pub fn borrow_expr<R: Rng>(&self, rng: &mut R) -> BorrowExpr {
         match self.borrow_type_id {
             BorrowTypeID::Ref => self.immut_borrow_expr(rng),
             BorrowTypeID::MutRef => self.mut_borrow_expr(rng),
-            _ => Err(()),
+            _ => panic!("Expr generator calling borrow expr when borrow type is none"),
         }
     }
 
     // TODO: Use a less conservative version
-    fn mut_borrow_expr<R: Rng>(&self, rng: &mut R) -> Result<BorrowExpr, ()> {
+    fn mut_borrow_expr<R: Rng>(&self, rng: &mut R) -> BorrowExpr {
         let filters = Filters::new().with_filters(vec![
             is_type_filter(self.type_id.clone()),
             is_not_mut_borrowed_filter(),
@@ -461,17 +460,17 @@ impl<'table> ExprGenerator<'table> {
                 }
 
                 // We explicitly borrow if the borrow type isn't a mut ref (i.e. it's a literal so we have to &mut)
-                Ok(BorrowExpr::new(
+                BorrowExpr::new(
                     BorrowTypeID::MutRef,
                     var.as_expr(),
                     scope_entry.get_borrow_type() != BorrowTypeID::MutRef,
-                ))
+                )
             }
-            None => Err(()),
+            None => BorrowExpr::new(self.borrow_type_id, self.literal_expr(rng), true),
         }
     }
 
-    fn immut_borrow_expr<R: Rng>(&self, rng: &mut R) -> Result<BorrowExpr, ()> {
+    fn immut_borrow_expr<R: Rng>(&self, rng: &mut R) -> BorrowExpr {
         let filters = Filters::new().with_filters(vec![
             is_type_filter(self.type_id.clone()),
             is_not_mut_borrowed_filter(),
@@ -500,13 +499,13 @@ impl<'table> ExprGenerator<'table> {
                         .mut_borrow_entry(&"temp_borrow".to_string(), entry_name);
                 }
 
-                Ok(BorrowExpr::new(
+                BorrowExpr::new(
                     BorrowTypeID::Ref,
                     var.as_expr(),
                     scope_entry.get_borrow_type() != BorrowTypeID::Ref,
-                ))
+                )
             }
-            None => Err(()),
+            None => BorrowExpr::new(self.borrow_type_id, self.literal_expr(rng), true),
         }
     }
 

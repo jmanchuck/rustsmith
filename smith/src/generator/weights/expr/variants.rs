@@ -29,6 +29,7 @@ pub enum BoolExprVariants {
 pub enum StructExprVariants {
     Literal,
     Var,
+    Func,
 }
 
 impl Distribution<ArithmeticExprVariants> for Standard {

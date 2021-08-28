@@ -1,10 +1,11 @@
 use crate::program::{struct_template::StructTemplate, var::Var};
 
-use super::expr::Expr;
+use super::{expr::Expr, func_call_expr::FunctionCallExpr};
 
 pub enum StructExpr {
     Literal(StructLiteral),
     Var(Var),
+    Func(FunctionCallExpr),
 }
 
 impl StructExpr {
@@ -16,8 +17,9 @@ impl StructExpr {
 impl ToString for StructExpr {
     fn to_string(&self) -> String {
         match self {
-            Self::Literal(s) => s.to_string(),
-            Self::Var(s) => s.to_string(),
+            StructExpr::Literal(s) => s.to_string(),
+            StructExpr::Var(s) => s.to_string(),
+            StructExpr::Func(s) => s.to_string(),
         }
     }
 }

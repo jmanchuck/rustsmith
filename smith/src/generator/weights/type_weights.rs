@@ -125,24 +125,3 @@ impl Distribution<BoolOp> for Standard {
         }
     }
 }
-
-#[cfg(test)]
-mod test {
-    use rand::Rng;
-
-    use crate::program::expr::arithmetic_expr::BinaryOp;
-
-    #[test]
-    fn binary_op_ratios() {
-        let mut i = 1;
-        for _ in 0..10000 {
-            let bin_op: BinaryOp = rand::thread_rng().gen();
-            match bin_op {
-                BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => i += 1,
-                _ => (),
-            }
-        }
-
-        // println!("{}/10000", i);
-    }
-}
