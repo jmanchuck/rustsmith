@@ -428,17 +428,20 @@ impl<'table> ExprGenerator<'table> {
         }
     }
 
-    // TODO: Use a less conservative version
+    // TODO: Delete previous borrows when we do this
     fn mut_borrow_expr<R: Rng>(&self, rng: &mut R) -> BorrowExpr {
         let filters = Filters::new().with_filters(vec![
             is_type_filter(self.type_id.clone()),
-            is_not_mut_borrowed_filter(),
-            is_not_borrowed_filter(),
-            is_var_filter(),
-            is_struct_filter(),
+            is_var_struct_filter(),
+            is_mut_or_mut_ref_filter(),
         ]);
 
         let entries = filters.filter(&self.context.borrow().scope);
+
+        if let TypeID::StructType(_) = self.type_id {
+            println!("type: {} {:#?}", self.type_id.to_string(), entries);
+            println!("{:#?}", self.context.borrow().scope);
+        }
         let choice = entries.choose(rng);
 
         match choice {
