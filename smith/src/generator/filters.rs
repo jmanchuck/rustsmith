@@ -19,6 +19,10 @@ pub fn is_struct_filter() -> ScopeBorrowClosure {
     Box::new(|scope_entry, _| scope_entry.is_struct())
 }
 
+pub fn is_var_struct_filter() -> ScopeBorrowClosure {
+    Box::new(|scope_entry, _| scope_entry.is_var() || scope_entry.is_struct())
+}
+
 pub fn is_type_filter(type_id: TypeID) -> ScopeBorrowClosure {
     Box::new(move |scope_entry, _| scope_entry.is_type(type_id.clone()))
 }
@@ -51,7 +55,7 @@ pub fn is_not_mut_borrowed_filter() -> ScopeBorrowClosure {
 }
 
 pub fn is_not_borrowed_filter() -> ScopeBorrowClosure {
-    Box::new(|_, borrow_status| borrow_status == BorrowStatus::None)
+    Box::new(|_, borrow_status| borrow_status == BorrowStatus::Borrowed)
 }
 
 pub fn is_mut_or_mut_ref_filter() -> ScopeBorrowClosure {
