@@ -55,6 +55,7 @@ def test(count):
     differentials = []
     timeout_info = dict.fromkeys(opt_levels, count)
     for i in range(count):
+        print(f"Testing for seed {count}")
         generate(i)
         compile(i)
         result = run(i)
@@ -64,6 +65,7 @@ def test(count):
         for opt_level, _ in result:
             timeout_info[opt_level] -= 1
         delete_bin_seed(i)
+        print("\n\n\n\n\n\n")
         
     
     if len(differentials) > 0:
