@@ -86,7 +86,7 @@ def main():
     elif args[1] == "clean":
         delete_if_exists("./executables")
         delete_if_exists("./results")
-        delete_if_exists("./src/bin/*.rs")
+        os.system("rm -rf ./src/bin/*.rs")
 
     elif args[1] == "format":
         os.system("rustfmt ./src/bin/*.rs")
