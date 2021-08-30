@@ -44,11 +44,16 @@ def run(seed):
             checksums.append((opt_level, checksum(result_dict)))
     
     return checksums
+
+def delete_bin_seed(seed):
+    filename = "seed_" + str(seed)
+    for opt_level in opt_levels:
+        os.system(f"rm -rf executables/{opt_level}/release/{filename}*")
     
 
 def test(count):
     differentials = []
-    timeout_info = dict.fromkeys(opt_levels, 0)
+    timeout_info = dict.fromkeys(opt_levels, count)
     for i in range(count):
         generate(i)
         compile(i)
@@ -57,7 +62,9 @@ def test(count):
             if min(result, key=lambda x: x[1]) != max(result, key=lambda x: x[1]):
                 differentials.append(i)
         for opt_level, _ in result:
-            timeout_info[opt_level] += 1
+            timeout_info[opt_level] -= 1
+        delete_bin_seed(i)
+        
     
     if len(differentials) > 0:
         print(f"Found differentials")
@@ -69,16 +76,31 @@ def test(count):
         f.write(f"Timeouts: {timeout_info}\n")
         f.write(f"Differentials: {differentials}")
 
+def clean():
+    delete_if_exists("./executables")
+    delete_if_exists("./results")
+    os.system("rm -rf ./src/bin/*.rs")
 
 commands = ["compile [seed (int)]", "generate [seed (int)]", "run [seed (int)]", "test [seed (int)]", "clean", "format", "help"]
 
 def main():
     args = sys.argv
     if args[1] == "compile":
-        compile(int(args[2]))
+        if args[2] == "all":
+            files = [name for name in os.listdir("./src/bin/") if name.endswith(".rs")]
+            for filename in files:
+                seed = int(''.join(i for i in filename if i.isdigit()))
+                compile(seed)
+        else:
+            compile(int(args[2]))
 
     elif args[1] == "generate":
-        generate(int(args[2]))
+        if args[2] == "-c":
+            count = int(args[3])
+            for i in range(count):
+                generate(i)
+        else:
+            generate(int(args[2]))
 
     elif args[1] == "run":
         run(int(args[2]))
@@ -87,9 +109,7 @@ def main():
         test(int(args[2]))
 
     elif args[1] == "clean":
-        delete_if_exists("./executables")
-        delete_if_exists("./results")
-        os.system("rm -rf ./src/bin/*.rs")
+        clean()
 
     elif args[1] == "format":
         os.system("rustfmt ./src/bin/*.rs")

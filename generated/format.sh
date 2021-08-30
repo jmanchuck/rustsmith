@@ -1,1 +1,0 @@
-rustfmt ./src/bin/*.rs
