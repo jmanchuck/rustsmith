@@ -385,10 +385,12 @@ impl<'table> ExprGenerator<'table> {
             let generator =
                 ExprGenerator::new_sub_expr(self, param.get_type(), param.get_borrow_type());
 
-            if param.get_borrow_type() == BorrowTypeID::None {
-                arguments.push(generator.expr(rng));
-            } else {
-                arguments.push(generator.borrow_expr(rng).as_expr());
+            match param.get_borrow_type() {
+                BorrowTypeID::None => arguments.push(generator.expr(rng)),
+                BorrowTypeID::Ref => arguments.push(generator.borrow_expr(rng).as_expr()),
+                BorrowTypeID::MutRef => {
+                    arguments.push(generator.func_mut_borrow_expr(rng).as_expr())
+                }
             }
         }
 
@@ -428,7 +430,56 @@ impl<'table> ExprGenerator<'table> {
         }
     }
 
-    // TODO: Delete previous borrows when we do this
+    // A mutable borrow in a function constitutes a 'use' of that borrow
+    // All previous variable borrows must go out of scope
+    fn func_mut_borrow_expr<R: Rng>(&self, rng: &mut R) -> BorrowExpr {
+        let filters = Filters::new().with_filters(vec![
+            is_type_filter(self.type_id.clone()),
+            is_var_struct_filter(),
+            is_mut_or_mut_ref_filter(),
+        ]);
+
+        let entries: Vec<(String, (Rc<ScopeEntry>, BorrowStatus))> = filters
+            .filter(&self.context.borrow().scope)
+            .into_iter()
+            .filter(|(entry_name, (_, _))| {
+                match self
+                    .context
+                    .borrow()
+                    .scope
+                    .borrow()
+                    .lookup_borrow_context(entry_name)
+                {
+                    Some(borrow_context) => !borrow_context.is_func_mut_borrowed(),
+                    None => false,
+                }
+            })
+            .collect();
+        let choice = entries.choose(rng);
+
+        match choice {
+            Some((entry_name, (scope_entry, _))) => {
+                let var = Var::new(self.type_id.clone(), entry_name.clone(), false);
+
+                self.context
+                    .borrow()
+                    .scope
+                    .borrow_mut()
+                    .func_mut_borrow(&entry_name);
+
+                // We explicitly borrow if the borrow type isn't a mut ref (i.e. it's a literal so we have to &mut)
+                BorrowExpr::new(
+                    BorrowTypeID::MutRef,
+                    var.as_expr(),
+                    scope_entry.get_borrow_type() != BorrowTypeID::MutRef,
+                )
+            }
+            None => BorrowExpr::new(self.borrow_type_id, self.literal_expr(rng), true),
+        }
+    }
+
+    // Mutable borrow expr DOES NOT remove previous borrows
+    // This borrow expr is strictly for instantiation
     fn mut_borrow_expr<R: Rng>(&self, rng: &mut R) -> BorrowExpr {
         let filters = Filters::new().with_filters(vec![
             is_type_filter(self.type_id.clone()),
@@ -437,11 +488,6 @@ impl<'table> ExprGenerator<'table> {
         ]);
 
         let entries = filters.filter(&self.context.borrow().scope);
-
-        if let TypeID::StructType(_) = self.type_id {
-            println!("type: {} {:#?}", self.type_id.to_string(), entries);
-            println!("{:#?}", self.context.borrow().scope);
-        }
         let choice = entries.choose(rng);
 
         match choice {

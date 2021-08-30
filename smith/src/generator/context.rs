@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use super::scope::Scope;
 pub struct Context {
@@ -8,6 +8,7 @@ pub struct Context {
     pub arith_expr_depth: u32,
     pub bool_expr_depth: u32,
     pub if_depth: u32,
+    pub func_call_mut_borrows: HashSet<String>,
 }
 
 impl Context {
@@ -47,6 +48,7 @@ impl Default for Context {
             if_depth: 0,
             arith_expr_depth: 0,
             bool_expr_depth: 0,
+            func_call_mut_borrows: HashSet::new(),
         }
     }
 }

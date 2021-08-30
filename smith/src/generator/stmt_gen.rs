@@ -8,7 +8,7 @@ use crate::{
         expr::{
             arithmetic_expr::{ArithmeticExpr, BinaryOp, IntExpr},
             bool_expr::{BoolExpr, ComparisonExpr, ComparisonOp},
-            expr::RawExpr,
+            expr::{Expr, RawExpr},
             iter_expr::IterRange,
         },
         stmt::{
@@ -242,11 +242,28 @@ impl<'a> StmtGenerator<'a> {
             scope_entry = ScopeEntry::Var(var.clone());
         }
 
-        context
-            .borrow()
-            .scope
-            .borrow_mut()
-            .insert(&var.get_name(), scope_entry);
+        if rand_borrow_type_id == BorrowTypeID::None {
+            context
+                .borrow()
+                .scope
+                .borrow_mut()
+                .insert(&var.get_name(), scope_entry);
+        } else if let Expr::Variable(_) = expr {
+            if rand_borrow_type_id == BorrowTypeID::Ref {
+                context.borrow().scope.borrow_mut().insert_borrow(
+                    &var.get_name(),
+                    scope_entry,
+                    &expr.to_string(),
+                );
+            } else if rand_borrow_type_id == BorrowTypeID::MutRef {
+                context.borrow().scope.borrow_mut().insert_mut_borrow(
+                    &var.get_name(),
+                    scope_entry,
+                    &expr.to_string(),
+                );
+            }
+        }
+
         LetStmt::new(var, expr)
     }
 
@@ -338,13 +355,6 @@ impl<'a> StmtGenerator<'a> {
         // What happens in the expr, stays in the expr
         context.borrow_mut().enter_scope();
 
-        // Borrow the LHS - which only exists temporarily within this RHS expr scope
-        context
-            .borrow()
-            .scope
-            .borrow_mut()
-            .mut_borrow_entry(&"temp_assignment_borrow".to_string(), &var_name);
-
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&context),
@@ -356,13 +366,18 @@ impl<'a> StmtGenerator<'a> {
 
         let expr = expr_generator.expr(rng);
 
+        context.borrow_mut().leave_scope();
+        if let Expr::Variable(_) = expr {
+            if scope_entry.is_borrow_type(BorrowTypeID::MutRef) {
+                context.borrow().scope.borrow_mut().use_mut_borrow(var_name);
+            }
+        }
+
         let left_var = Var::new(scope_entry.get_type(), var_name.clone(), true);
 
         // We need to dereference if it is a mutable reference, but not if it is a field of a mutref struct
         let deref =
             scope_entry.is_borrow_type(BorrowTypeID::MutRef) && !left_var.get_name().contains('.');
-
-        context.borrow_mut().leave_scope();
 
         AssignStmt::new(left_var, expr, deref)
     }
@@ -425,13 +440,6 @@ impl<'a> StmtGenerator<'a> {
         // What happens in the expr, stays in the expr
         context.borrow_mut().enter_scope();
 
-        // Borrow the LHS - which only exists temporarily within this RHS expr scope
-        context
-            .borrow()
-            .scope
-            .borrow_mut()
-            .mut_borrow_entry(&"temp_assignment_borrow".to_string(), &var_name);
-
         let generator = ExprGenerator::new(
             &self.struct_table,
             context.clone(),
@@ -446,6 +454,7 @@ impl<'a> StmtGenerator<'a> {
 
         let op = rng.gen();
         let lhs_var = Var::new(type_id, var_name.clone(), false);
+
         OpAssignStmt::new(lhs_var, expr, op)
     }
 

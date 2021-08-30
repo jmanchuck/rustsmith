@@ -8,9 +8,9 @@ pub const MAX_FUNCS: u32 = 5;
 pub const MAX_FUNC_PARAMS: u32 = 6;
 
 pub const MAX_STMTS_IN_BLOCK: u8 = 8;
-pub const MAX_CONDITIONAL_BRANCHES: u8 = 2;
+pub const MAX_CONDITIONAL_BRANCHES: u8 = 4;
 pub const MAX_CONDITIONAL_DEPTH: u32 = 2; // Only refers to conditional statements
-pub const MAX_LOOP_DEPTH: u32 = 1;
+pub const MAX_LOOP_DEPTH: u32 = 2;
 
 pub const MAX_FOR_LOOP_ITERS: u32 = 1000;
 pub const PROB_MAX_FOR_LOOP_ITERS: f32 = 0.2;

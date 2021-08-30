@@ -4,7 +4,9 @@ use rand::{prelude::SliceRandom, Rng};
 
 use crate::program::types::{BorrowStatus, BorrowTypeID};
 
-use super::{borrow_scope::BorrowContext, scope_entry::ScopeEntry};
+use super::{
+    borrow_scope::BorrowContext, filters::is_mut_or_mut_ref_filter, scope_entry::ScopeEntry,
+};
 
 pub struct Scope {
     parent: Option<Rc<RefCell<Scope>>>,
@@ -78,6 +80,39 @@ impl Scope {
             .insert(entry_name.clone(), BorrowContext::new(borrow_source));
     }
 
+    pub fn use_borrow(&mut self, borrow_name: &String) {
+        let borrow_context = self.borrows.get_mut(borrow_name).unwrap();
+
+        let borrow_source = borrow_context.get_borrow_source();
+        match borrow_source {
+            Some(_) => (),
+            None => panic!("Variable {} does not have a borrow source", borrow_name),
+        }
+        let borrow_source = borrow_source.unwrap();
+
+        let borrow_source_context = self.lookup_borrow_context(&borrow_source);
+
+        match borrow_source_context {
+            Some(_) => (),
+            None => panic!("Could not find borrow context for {}", borrow_source),
+        }
+        let borrow_source_context = borrow_source_context.unwrap();
+
+        let entries_to_remove = borrow_source_context.get_mut_borrows();
+
+        for borrows in entries_to_remove {
+            self.remove_entry(&borrows);
+        }
+    }
+
+    pub fn borrow_entry(&mut self, borrower: &String, borrow_source: &String) {
+        if borrow_source.contains('.') {
+            self.borrow_struct_field_entry(borrower, borrow_source);
+        } else {
+            self.borrow_entry_raw(borrower, borrow_source);
+        }
+    }
+
     pub fn borrow_struct_field_entry(&mut self, borrower: &String, borrow_source: &String) {
         let borrow_source = String::from(borrow_source);
 
@@ -104,27 +139,81 @@ impl Scope {
         }
     }
 
-    pub fn borrow_entry(&mut self, borrower: &String, borrow_source: &String) {
-        if borrow_source.contains('.') {
-            self.borrow_struct_field_entry(borrower, borrow_source);
-        } else {
-            self.borrow_entry_raw(borrower, borrow_source);
-        }
-    }
-
     // Sorry I couldn't think of a better name pt. 1
     fn borrow_entry_raw(&mut self, borrower: &String, borrow_source: &String) {
         if !self.borrows.contains_key(borrow_source) {
             panic!(
-                "Could not find borrow source in borrow scope: {}",
-                borrow_source
-            );
+                "Could not find borrow source {} for borrower {}",
+                borrow_source, borrower
+            )
         }
         let borrow_source_context = self.borrows.get_mut(borrow_source).unwrap();
         borrow_source_context.borrow(&borrower);
+    }
 
-        match borrow_source_context.get_mut_borrow() {
-            Some(borrower) => self.remove_entry(&borrower),
+    pub fn use_mut_borrow(&mut self, borrow_name: &String) {
+        let borrow_context = self.borrows.get_mut(borrow_name).unwrap();
+
+        let borrow_source = borrow_context.get_borrow_source();
+        match borrow_source {
+            Some(_) => (),
+            None => return,
+        }
+        let borrow_source = borrow_source.unwrap();
+
+        let borrow_source_context = self.lookup_borrow_context(&borrow_source);
+
+        match borrow_source_context {
+            Some(_) => (),
+            None => panic!("Could not find borrow context for {}", borrow_source),
+        }
+        let borrow_source_context = borrow_source_context.unwrap();
+
+        let entries_to_remove = [
+            borrow_source_context.get_borrows(),
+            borrow_source_context.get_mut_borrows(),
+        ]
+        .concat();
+
+        for borrows in entries_to_remove {
+            self.remove_entry(&borrows);
+        }
+    }
+
+    pub fn func_mut_borrow(&mut self, borrow_entry: &String) {
+        if self.lookup(borrow_entry).unwrap().0.is_struct() || borrow_entry.contains('.') {
+            self.func_mut_borrow_struct_field(borrow_entry);
+        } else {
+            self.func_mut_borrow_raw(borrow_entry);
+        }
+    }
+
+    fn func_mut_borrow_raw(&mut self, borrow_entry: &String) {
+        // Mutably borrow, deleting previous mutable borrow if exists
+        let borrow_source_context = self.borrows.get_mut(borrow_entry).unwrap();
+        borrow_source_context.func_mut_borrow();
+
+        self.use_mut_borrow(borrow_entry);
+    }
+
+    fn func_mut_borrow_struct_field(&mut self, borrow_entry: &String) {
+        let borrow_source = String::from(borrow_entry);
+        let separated: Vec<&str> = borrow_source.split('.').collect();
+
+        for i in 0..separated.len() {
+            let entry_to_borrow = separated[..=i].join(".");
+            self.func_mut_borrow_raw(&entry_to_borrow);
+        }
+
+        match self.lookup(&borrow_source) {
+            Some((scope_entry, _)) => {
+                if let ScopeEntry::Struct(struct_scope_entry) = scope_entry.as_ref() {
+                    for (field_name, _) in struct_scope_entry.get_field_entries() {
+                        let full_name = format!("{}.{}", borrow_source, field_name);
+                        self.func_mut_borrow_raw(&full_name);
+                    }
+                }
+            }
             None => (),
         }
     }
@@ -163,29 +252,15 @@ impl Scope {
         }
     }
 
-    // Sorry I couldn't think of a better name pt. 2
     fn mut_borrow_entry_raw(&mut self, borrower: &String, borrow_source: &String) {
         if !self.borrows.contains_key(borrow_source) {
             panic!(
-                "Could not find borrow source in borrow scope: {}",
-                borrow_source
-            );
+                "Could not find borrow source {} for borrower {}",
+                borrow_source, borrower
+            )
         }
-        // Delete previous immutable borrows
-        let prev_borrows = self.borrows.get(borrow_source).unwrap().get_borrows();
-        for borrow in prev_borrows {
-            self.remove_entry(&borrow);
-        }
-
-        // Mutably borrow, deleting previous mutable borrow if exists
         let borrow_source_context = self.borrows.get_mut(borrow_source).unwrap();
-        let result = borrow_source_context.mut_borrow(&borrower);
-
-        // Delete previous mut borrow
-        match result {
-            Some(prev_mut_borrow) => self.remove_entry(&prev_mut_borrow),
-            _ => (),
-        }
+        borrow_source_context.mut_borrow(&borrower);
     }
 
     pub fn borrow_count(&self, entry_name: &String) -> usize {
@@ -209,13 +284,6 @@ impl Scope {
             self.remove_struct_scope_entry(&parent_struct_var_name);
         } else {
             self.remove_var_scope_entry(entry_name);
-        }
-    }
-
-    pub fn lookup(&self, entry_name: &str) -> Option<(Rc<ScopeEntry>, BorrowStatus)> {
-        match self.get_all_entries().get(entry_name) {
-            Some(entry) => Some(entry.clone()),
-            None => None,
         }
     }
 
@@ -290,6 +358,17 @@ impl Scope {
         }
     }
 
+    pub fn lookup(&self, entry_name: &str) -> Option<(Rc<ScopeEntry>, BorrowStatus)> {
+        match self.get_all_entries().get(entry_name) {
+            Some(entry) => Some(entry.clone()),
+            None => None,
+        }
+    }
+
+    pub fn lookup_borrow_context(&self, entry_name: &str) -> Option<&BorrowContext> {
+        self.borrows.get(entry_name)
+    }
+
     pub fn contains_filter<T>(&self, filter: T) -> bool
     where
         T: Fn(Rc<ScopeEntry>, BorrowStatus) -> bool,
@@ -354,11 +433,7 @@ impl Scope {
         &self,
         rng: &mut R,
     ) -> Result<(String, (Rc<ScopeEntry>, BorrowStatus)), ()> {
-        let filter = |scope_entry: Rc<ScopeEntry>, borrow_status: BorrowStatus| -> bool {
-            (scope_entry.is_mut() && (borrow_status != BorrowStatus::Borrowed))
-                || borrow_status == BorrowStatus::MutBorrowed
-        };
-        let mutables = self.filter_with_closure(filter);
+        let mutables = self.filter_with_closure(is_mut_or_mut_ref_filter());
 
         match mutables.choose(rng) {
             Some(choice) => Ok(choice.clone()),
@@ -367,8 +442,7 @@ impl Scope {
     }
 
     pub fn mut_count(&self) -> usize {
-        self.filter_with_closure(|scope_entry, _| scope_entry.is_mut())
-            .len()
+        self.filter_with_closure(is_mut_or_mut_ref_filter()).len()
     }
 
     // Should all be unique names since we start from current scope and work up, only adding new names (i.e. nearest name in scope is seen)
@@ -516,17 +590,15 @@ mod test {
         scope.insert(&"a".to_string(), struct_entry);
 
         assert_eq!(scope.get_all_entries().len(), 4);
-
-        println!("{:#?}", scope.get_all_entries());
     }
 
     #[test]
+    /* This test mimics the following:
+        let a = _;
+        let b = &a;
+        drop(b);
+    */
     fn removes_borrow() {
-        /* This test mimics the following:
-            let a = _;
-            let b = &a;
-            drop(b);
-        */
         let mut scope = Scope::new();
 
         let a = "a".to_string();
@@ -546,6 +618,13 @@ mod test {
     }
 
     #[test]
+    /*
+        let mut a = 10;
+        let b = &a;         borrow created
+        let c = &mut a;     mut borrow created
+        *c = 5;             mut borrow used
+        ---- b cannot be used again ----
+    */
     fn mut_borrow_deletes_all_borrows() {
         let mut scope = Scope::new();
 
@@ -553,7 +632,7 @@ mod test {
         let b = "b".to_string();
         let c = "c".to_string();
 
-        let entry_a = Var::new(TypeID::NullType, a.clone(), false).as_scope_entry();
+        let entry_a = Var::new(TypeID::NullType, a.clone(), true).as_scope_entry();
         let entry_b = Var::new(TypeID::NullType, b.clone(), false).as_scope_entry();
         let entry_c = Var::new(TypeID::NullType, c.clone(), false).as_scope_entry();
 
@@ -563,28 +642,8 @@ mod test {
         assert_eq!(scope.borrow_count(&a), 1);
 
         scope.insert_mut_borrow(&c, entry_c, &a);
+        scope.use_mut_borrow(&c);
         assert_eq!(scope.borrow_count(&a), 0);
-    }
-
-    #[test]
-    fn borrow_deletes_all_mut_borrows() {
-        let mut scope = Scope::new();
-
-        let a = "a".to_string();
-        let b = "b".to_string();
-        let c = "c".to_string();
-
-        let entry_a = Var::new(TypeID::NullType, a.clone(), false).as_scope_entry();
-        let entry_b = Var::new(TypeID::NullType, b.clone(), false).as_scope_entry();
-        let entry_c = Var::new(TypeID::NullType, c.clone(), false).as_scope_entry();
-
-        scope.insert(&a, entry_a);
-
-        scope.insert_mut_borrow(&c, entry_c, &a);
-        assert!(scope.is_mut_borrowed(&a));
-
-        scope.insert_borrow(&b, entry_b, &a);
-        assert!(!scope.is_mut_borrowed(&a));
     }
 
     #[test]
