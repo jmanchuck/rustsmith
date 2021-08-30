@@ -69,6 +69,9 @@ def test(count):
         f.write(f"Timeouts: {timeout_info}\n")
         f.write(f"Differentials: {differentials}")
 
+
+commands = ["compile [seed (int)]", "generate [seed (int)]", "run [seed (int)]", "test [seed (int)]", "clean", "format", "help"]
+
 def main():
     args = sys.argv
     if args[1] == "compile":
@@ -90,6 +93,10 @@ def main():
 
     elif args[1] == "format":
         os.system("rustfmt ./src/bin/*.rs")
+
+    else:
+        help_str = ''.join(['    ' + x + '\n' for x in commands])
+        print(f"Usage:\npython3 runtest.py\n{help_str}")
 
 if __name__ == "__main__":
     main()
