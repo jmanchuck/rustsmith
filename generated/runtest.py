@@ -51,10 +51,10 @@ def delete_bin_seed(seed):
         os.system(f"rm -rf executables/{opt_level}/release/{filename}*")
     
 
-def test(count):
+def test(count, start=0):
     differentials = []
     timeout_info = dict.fromkeys(opt_levels, count)
-    for i in range(count):
+    for i in range(start, start + count):
         print(f"Testing for seed {i}")
         generate(i)
         compile(i)
@@ -74,7 +74,7 @@ def test(count):
         print("No differentials found")
 
     with open("results", "w") as f:
-        f.write(f"Total runs: {count}\n")
+        f.write(f"Total runs: {count} | Starting seed: {start}\n")
         f.write(f"Timeouts: {timeout_info}\n")
         f.write(f"Differentials: {differentials}")
 
@@ -108,7 +108,10 @@ def main():
         run(int(args[2]))
 
     elif args[1] == "test":
-        test(int(args[2]))
+        if len(args) == 4:
+            test(int(args[2]), int(args[3]))
+        else:
+            test(int(args[2]))
 
     elif args[1] == "clean":
         clean()
