@@ -356,6 +356,12 @@ impl<'a> StmtGenerator<'a> {
         // What happens in the expr, stays in the expr
         context.borrow_mut().enter_scope();
 
+        context
+            .borrow()
+            .scope
+            .borrow_mut()
+            .func_mut_borrow(var_name);
+
         let expr_generator = ExprGenerator::new(
             self.struct_table,
             Rc::clone(&context),
@@ -440,6 +446,12 @@ impl<'a> StmtGenerator<'a> {
 
         // What happens in the expr, stays in the expr
         context.borrow_mut().enter_scope();
+
+        context
+            .borrow()
+            .scope
+            .borrow_mut()
+            .func_mut_borrow(var_name);
 
         let generator = ExprGenerator::new(
             &self.struct_table,
