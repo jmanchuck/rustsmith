@@ -1,3 +1,6 @@
+/// The Context data structure is passed throughout the generator
+/// It holds important information such as the scope and helps determine
+/// what productions can be used and when
 use std::{cell::RefCell, collections::HashSet, rc::Rc};
 
 use super::scope::Scope;

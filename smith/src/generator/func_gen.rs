@@ -1,3 +1,4 @@
+/// Generates function names, parameters, return types
 use std::{cell::RefCell, rc::Rc};
 
 use super::{

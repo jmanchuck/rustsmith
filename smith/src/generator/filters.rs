@@ -1,3 +1,4 @@
+/// A set of commonly used functions to filter variables from the scope
 use std::{cell::RefCell, rc::Rc};
 
 use crate::program::types::{BorrowStatus, BorrowTypeID, TypeID};

@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+/// Maintains the borrow information of a single entry
 use std::collections::HashSet;
 
 use crate::program::types::BorrowStatus;

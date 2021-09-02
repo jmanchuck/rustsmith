@@ -1,4 +1,7 @@
 #![allow(dead_code)]
+/// Generates global static variables
+/// Currently unused since global static variables are not allowed
+/// This should be modified to use Mutex wrappers
 use std::{cell::RefCell, rc::Rc};
 
 use rand::Rng;

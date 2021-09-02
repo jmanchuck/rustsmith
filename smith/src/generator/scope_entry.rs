@@ -1,3 +1,5 @@
+/// Data structure presenting a variable in scope
+/// Contains variable, struct and function entry types
 use std::{collections::BTreeMap, fmt, rc::Rc};
 
 use crate::program::{

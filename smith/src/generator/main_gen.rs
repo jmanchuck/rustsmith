@@ -1,3 +1,4 @@
+/// Main entry point for generating a program
 use std::cell::RefCell;
 use std::rc::Rc;
 

@@ -1,3 +1,5 @@
+/// Contains the entries in scope and their respective borrow status
+/// Accessed by the Context struct in context.rs
 use std::{cell::RefCell, collections::BTreeMap, fmt, rc::Rc};
 
 use rand::{prelude::SliceRandom, Rng};

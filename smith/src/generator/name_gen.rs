@@ -1,3 +1,5 @@
+/// Used to prevent overlapping names
+
 pub struct NameGenerator {
     curr: u32,
     prefix: String,

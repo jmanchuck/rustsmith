@@ -1,3 +1,5 @@
+/// Generates structs, and global struct
+/// Main entry point in order to randomly select a type
 use crate::program::{
     struct_template::StructTemplate,
     types::{IntTypeID, TypeID, TypeIDVariants},
