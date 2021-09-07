@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import os
 import sys
-import time
 from os import path
 
 opt_levels = ["0", "3", "s"]
@@ -109,11 +108,8 @@ def main():
         if args[2] == "all":
             for opt_level in opt_levels:
                 files = [name for name in os.listdir(f"./executables/{opt_level}/release") if not name.endswith(".d") and name.startswith("seed")]
-                start_time = time.time()
                 for filename in files:
-                    res = subprocess.Popen(f"timeout 2s ./executables/{opt_level}/release/{filename}", shell=True, stdout=subprocess.PIPE)
-                    
-                print(f"Duration {opt_level}: {time.time() - start_time}")
+                    res = subprocess.Popen(f"timeout 2s ./executables/{opt_level}/release/{filename}", shell=True)
         else:
             run(int(args[2]))
 
