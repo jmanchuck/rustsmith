@@ -24,12 +24,18 @@ def generate(seed):
 def compile(seed):
     name = "seed_" + str(seed)
     mkdir_if_not_exist("executables")
+    failed_opt_levels = []
     for opt_level in opt_levels:
         mkdir_if_not_exist(f"executables/{opt_level}")
-        os.system(f"CARGO_PROFILE_RELEASE_OPT_LEVEL={opt_level}")
-        os.system(f"cargo build --bin {name} --release --target-dir executables/{opt_level}")
-
-    os.system("unset CARGO_PROFILE_RELEASE_OPT_LEVEL")
+        env = os.environ.copy()
+        env["CARGO_PROFILE_RELEASE_OPT_LEVEL"] = opt_level
+        result = subprocess.run(
+            f"cargo build --bin {name} --release --target-dir executables/{opt_level}",
+            shell=True, env=env)
+        if result.returncode != 0:
+            print(f"COMPILE FAILURE (possible ICE): seed {seed} at opt-level {opt_level}, exit code {result.returncode}")
+            failed_opt_levels.append(opt_level)
+    return failed_opt_levels
 
 def run(seed):
     def checksum(result_dict):
@@ -53,11 +59,14 @@ def delete_bin_seed(seed):
 
 def test(count, start=0):
     differentials = []
+    compile_failures = {}
     timeout_info = dict.fromkeys(opt_levels, count)
     for i in range(start, start + count):
         print(f"Testing for seed {i}")
         generate(i)
-        compile(i)
+        failed = compile(i)
+        if failed:
+            compile_failures[i] = failed
         result = run(i)
         if len(result) >= 2:
             if min(result, key=lambda x: x[1]) != max(result, key=lambda x: x[1]):
@@ -76,7 +85,8 @@ def test(count, start=0):
     with open("results", "w") as f:
         f.write(f"Total runs: {count} | Starting seed: {start}\n")
         f.write(f"Timeouts: {timeout_info}\n")
-        f.write(f"Differentials: {differentials}")
+        f.write(f"Differentials: {differentials}\n")
+        f.write(f"Compile failures (seed -> opt levels): {compile_failures}")
 
 def clean():
     delete_if_exists("./executables")
