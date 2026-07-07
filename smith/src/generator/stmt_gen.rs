@@ -1,7 +1,7 @@
 /// Generates statements
 use std::{cell::RefCell, rc::Rc};
 
-use rand::{prelude::SliceRandom, Rng};
+use crate::rng::{Rng, SliceChoose};
 
 use crate::{
     generator::filters::*,
@@ -308,7 +308,7 @@ impl<'a> StmtGenerator<'a> {
         context: Rc<RefCell<Context>>,
         rng: &mut R,
     ) -> ForLoopStmt {
-        let rand_int_type: IntTypeID = rand::random();
+        let rand_int_type: IntTypeID = rng.gen();
         let rand_type = rand_int_type.as_type();
 
         context.borrow_mut().loop_depth += 1;
@@ -405,7 +405,7 @@ impl<'a> StmtGenerator<'a> {
         );
 
         loop {
-            if rng.gen_range(0.0..1.0)
+            if rng.gen_range(0.0f32..1.0)
                 < conditional_blocks.len() as f32 / consts::MAX_CONDITIONAL_BRANCHES as f32
             {
                 break;

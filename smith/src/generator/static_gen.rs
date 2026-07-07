@@ -4,7 +4,7 @@
 /// This should be modified to use Mutex wrappers
 use std::{cell::RefCell, rc::Rc};
 
-use rand::Rng;
+use crate::rng::Rng;
 
 use crate::program::stmt::static_stmt::StaticStmt;
 

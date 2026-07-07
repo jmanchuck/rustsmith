@@ -11,7 +11,7 @@ use crate::program::{
     types::{BorrowTypeID, TypeID},
     var::Var,
 };
-use rand::Rng;
+use crate::rng::Rng;
 
 pub struct FuncGenerator<'a> {
     struct_table: &'a StructTable, // We only need a immutable reference
@@ -52,7 +52,7 @@ impl<'a> FuncGenerator<'a> {
         let mut param_list: Vec<Param> = Vec::new();
 
         for _ in 0..self.max_params {
-            if rng.gen_range(0.0..1.0) < param_list.len() as f32 / consts::MAX_FUNC_PARAMS as f32 {
+            if rng.gen_range(0.0f32..1.0) < param_list.len() as f32 / consts::MAX_FUNC_PARAMS as f32 {
                 break;
             }
 

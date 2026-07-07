@@ -1,101 +1,86 @@
-use clap::{App, Arg, ArgMatches};
-use indicatif::ProgressBar;
 use std::fs;
+use std::path::PathBuf;
+use std::process::exit;
+
+const USAGE: &str = "Usage: generated --seed <u64> [--count <u64>] [--out <dir>]
+  -s, --seed <u64>    Starting seed (required)
+  -c, --count <u64>   Number of programs to generate (default: 1)
+  -o, --out <dir>     Output directory (default: ./src/bin)";
+
 fn main() {
-    let config = RunConfig::new_from_args(get_args());
+    let config = RunConfig::new_from_args();
 
-    let progress_bar = ProgressBar::new(config.count());
+    if let Err(err) = fs::create_dir_all(&config.out) {
+        eprintln!("Failed to create output directory: {}", err);
+        exit(1);
+    }
 
-    for seed in config.seed()..config.seed() + config.count() {
+    for seed in config.seed..config.seed + config.count {
         let code = smith::generate_from_seed(seed);
 
-        let file_path = format!("./src/bin/{}.rs", RunConfig::as_file_name(seed));
+        let file_path = config.out.join(format!("{}.rs", RunConfig::as_file_name(seed)));
 
-        match fs::write(file_path, code.as_str()) {
+        match fs::write(&file_path, code.as_str()) {
             Ok(_) => (),
             Err(err) => panic!("Failed to generate, {}", err),
         };
-
-        progress_bar.inc(1);
     }
 }
 
-pub fn get_args() -> ArgMatches<'static> {
-    App::new("RustSmith")
-        .version("0.3.0")
-        .author("JJ <jjcheung0000@gmail.com>")
-        .about("Rust program generator")
-        .arg(
-            Arg::with_name("seed")
-                .short("s")
-                .long("seed")
-                .takes_value(true)
-                .help("Unsigned 64 integer"),
-        )
-        .arg(
-            Arg::with_name("filename")
-                .short("f")
-                .long("filename")
-                .takes_value(true)
-                .help("Name of file to be generated"),
-        )
-        .arg(
-            Arg::with_name("count")
-                .short("c")
-                .long("count")
-                .takes_value(true)
-                .help("Number of random programs to generate"),
-        )
-        .get_matches()
-}
-
-#[derive(Debug)]
 pub struct RunConfig {
     seed: u64,
     count: u64,
+    out: PathBuf,
 }
 
 impl RunConfig {
-    pub fn new(seed: u64, count: u64) -> Self {
-        RunConfig { seed, count }
-    }
+    pub fn new_from_args() -> Self {
+        let mut seed: Option<u64> = None;
+        let mut count: u64 = 1;
+        let mut out = PathBuf::from("./src/bin");
 
-    pub fn new_from_args(args: ArgMatches) -> Self {
-        let seed: u64 = RunConfig::parse_seed(&args);
-        let count: u64 = RunConfig::parse_count(&args);
+        let mut args = std::env::args().skip(1);
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "-s" | "--seed" => seed = Some(Self::parse_u64_value(&arg, args.next())),
+                "-c" | "--count" => count = Self::parse_u64_value(&arg, args.next()),
+                "-o" | "--out" => match args.next() {
+                    Some(value) => out = PathBuf::from(value),
+                    None => Self::usage_error(&format!("Missing value for {}", arg)),
+                },
+                _ => Self::usage_error(&format!("Unexpected argument: {}", arg)),
+            }
+        }
 
-        RunConfig { seed, count }
-    }
+        let seed = match seed {
+            Some(seed) => seed,
+            None => {
+                Self::usage_error("Missing required argument: --seed");
+            }
+        };
 
-    pub fn seed(&self) -> u64 {
-        self.seed
+        RunConfig { seed, count, out }
     }
 
     pub fn as_file_name(seed: u64) -> String {
         format!("seed_{}", seed)
     }
 
-    pub fn count(&self) -> u64 {
-        self.count
-    }
+    fn parse_u64_value(flag: &str, value: Option<String>) -> u64 {
+        let value = match value {
+            Some(value) => value,
+            None => Self::usage_error(&format!("Missing value for {}", flag)),
+        };
 
-    fn parse_seed(args: &ArgMatches) -> u64 {
-        match args.value_of("seed") {
-            None => Default::default(),
-            Some(seed_str) => match seed_str.parse::<u64>() {
-                Err(_) => {
-                    println!("Failed to parse seed, using default seed");
-                    Default::default()
-                }
-                Ok(seed_int) => seed_int,
-            },
+        match value.parse::<u64>() {
+            Ok(parsed) => parsed,
+            Err(_) => Self::usage_error(&format!("Invalid u64 for {}: {}", flag, value)),
         }
     }
 
-    fn parse_count(args: &ArgMatches) -> u64 {
-        match args.value_of("count") {
-            None => 1,
-            Some(value) => value.parse::<u64>().unwrap_or(1),
-        }
+    fn usage_error(message: &str) -> ! {
+        eprintln!("{}", message);
+        eprintln!("{}", USAGE);
+        exit(2);
     }
 }

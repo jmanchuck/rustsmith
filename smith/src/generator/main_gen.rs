@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::program::program::Program;
-use rand::Rng;
+use crate::rng::Rng;
 
 use super::consts;
 use super::context::Context;
@@ -24,7 +24,7 @@ pub fn gen_main<R: Rng>(rng: &mut R) -> String {
 
     program.push_struct_template(static_struct_template);
     loop {
-        if rng.gen_range(0.0..1.0) < struct_table.len() as f32 / consts::MAX_STRUCTS as f32 {
+        if rng.gen_range(0.0f32..1.0) < struct_table.len() as f32 / consts::MAX_STRUCTS as f32 {
             break;
         }
         let struct_template = struct_table.gen_struct(rng);
@@ -35,7 +35,7 @@ pub fn gen_main<R: Rng>(rng: &mut R) -> String {
 
     loop {
         // generate main on some probability proportional to number of generated funcs vs max (linear)
-        let is_main = rng.gen_range(0.0..1.0) < func_count as f32 / consts::MAX_FUNCS as f32;
+        let is_main = rng.gen_range(0.0f32..1.0) < func_count as f32 / consts::MAX_FUNCS as f32;
 
         let function = func_gen.gen_func(Rc::clone(&context), rng, is_main);
 

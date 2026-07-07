@@ -1,6 +1,4 @@
-use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
-
-#[derive(Debug, Copy, Clone, PartialEq, EnumIter)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BorrowTypeID {
     None,
     Ref,
@@ -8,6 +6,8 @@ pub enum BorrowTypeID {
 }
 
 impl BorrowTypeID {
+    pub const ALL: &'static [Self] = &[Self::None, Self::Ref, Self::MutRef];
+
     pub fn as_borrow_status(self) -> BorrowStatus {
         match self {
             BorrowTypeID::None => BorrowStatus::None,
@@ -34,15 +34,48 @@ pub enum BorrowStatus {
     None,
 }
 
-#[derive(PartialEq, Clone, Hash, Eq, EnumDiscriminants, Debug)]
-#[strum_discriminants(vis(pub))]
-#[strum_discriminants(name(TypeIDVariants))]
-#[strum_discriminants(derive(EnumCount, EnumIter))]
+#[derive(PartialEq, Clone, Hash, Eq, Debug)]
 pub enum TypeID {
     IntType(IntTypeID),
     StructType(String), // String to denote the struct name
     BoolType,
     NullType,
+}
+
+/// Discriminants of `TypeID` (hand-written replacement for strum's
+/// `EnumDiscriminants` derive).
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum TypeIDVariants {
+    IntType,
+    StructType,
+    BoolType,
+    NullType,
+}
+
+impl TypeIDVariants {
+    pub const ALL: &'static [Self] = &[
+        Self::IntType,
+        Self::StructType,
+        Self::BoolType,
+        Self::NullType,
+    ];
+}
+
+impl From<&TypeID> for TypeIDVariants {
+    fn from(type_id: &TypeID) -> Self {
+        match type_id {
+            TypeID::IntType(_) => Self::IntType,
+            TypeID::StructType(_) => Self::StructType,
+            TypeID::BoolType => Self::BoolType,
+            TypeID::NullType => Self::NullType,
+        }
+    }
+}
+
+impl From<TypeID> for TypeIDVariants {
+    fn from(type_id: TypeID) -> Self {
+        Self::from(&type_id)
+    }
 }
 
 impl TypeID {

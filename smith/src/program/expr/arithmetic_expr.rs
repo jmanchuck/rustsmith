@@ -3,8 +3,6 @@ use crate::program::{
     types::{IntTypeID, TypeID},
     var::Var,
 };
-use strum_macros::EnumIter;
-
 pub enum ArithmeticExpr {
     Int(IntExpr),
     Binary(Box<BinaryExpr>),
@@ -114,7 +112,7 @@ impl ToString for BinaryExpr {
     }
 }
 
-#[derive(Copy, Clone, EnumIter)]
+#[derive(Copy, Clone)]
 pub enum BinaryOp {
     ADD,
     SUB,
@@ -127,6 +125,17 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
+    pub const ALL: &'static [Self] = &[
+        Self::ADD,
+        Self::SUB,
+        Self::MUL,
+        Self::DIV,
+        Self::MOD,
+        Self::BITAND,
+        Self::BITOR,
+        Self::BITXOR,
+    ];
+
     pub fn to_string_safe(&self) -> String {
         match self {
             BinaryOp::ADD => String::from("safe_add"),

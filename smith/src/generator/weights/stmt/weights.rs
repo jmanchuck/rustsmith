@@ -3,6 +3,10 @@ use crate::generator::weights::EnumWeights;
 use super::variants::StmtVariants;
 
 impl EnumWeights for StmtVariants {
+    fn all() -> &'static [Self] {
+        StmtVariants::ALL
+    }
+
     fn weight(&self) -> u32 {
         match self {
             StmtVariants::LetStatement => 2,

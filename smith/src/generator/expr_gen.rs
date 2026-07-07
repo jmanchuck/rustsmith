@@ -17,7 +17,7 @@ use crate::program::{
     types::{BorrowStatus, BorrowTypeID, IntTypeID, TypeID},
     var::Var,
 };
-use rand::{seq::SliceRandom, Rng};
+use crate::rng::{Rng, SliceChoose};
 
 use super::{
     consts, context::Context, filters::*, scope_entry::ScopeEntry, struct_gen::StructTable,

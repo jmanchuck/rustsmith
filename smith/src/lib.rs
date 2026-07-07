@@ -1,9 +1,10 @@
-use rand::{prelude::StdRng, SeedableRng};
+use crate::rng::StdRng;
 
 use crate::generator::main_gen;
 
 pub mod generator;
 pub mod program;
+pub mod rng;
 
 pub fn generate_from_seed(seed: u64) -> String {
     let mut rng = StdRng::seed_from_u64(seed);
