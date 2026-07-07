@@ -64,6 +64,18 @@ impl ToString for OpAssignStmt {
                     place, rhs, place, method, place
                 )
             }
+            BinaryOp::SHL | BinaryOp::SHR => {
+                // Same wrapping form as BinaryExpr: plain <<= / >>= panics
+                // under overflow-checks=on when the amount >= bit-width, so
+                // the compound-assign operator form must not be used.
+                format!(
+                    "{} = ({}).{}(({}) as u32);",
+                    place,
+                    place,
+                    self.op.to_string_safe(),
+                    rhs
+                )
+            }
             _ => format!(
                 "{} = ({}).{}({});",
                 place,
@@ -72,5 +84,33 @@ impl ToString for OpAssignStmt {
                 rhs
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::program::{
+        expr::arithmetic_expr::IntExpr,
+        types::{IntTypeID, TypeID},
+    };
+
+    #[test]
+    fn shift_op_assign_uses_wrapping_form_with_u32_amount() {
+        let var = Var::new(
+            TypeID::IntType(IntTypeID::I32),
+            String::from("a"),
+            false,
+        );
+        let stmt = OpAssignStmt::new(var, IntExpr::new_u8(3).as_arith_expr(), BinaryOp::SHL);
+        assert_eq!(stmt.to_string(), "a = (a).wrapping_shl((3u8) as u32);");
+
+        let var = Var::new(
+            TypeID::IntType(IntTypeID::U64),
+            String::from("b"),
+            false,
+        );
+        let stmt = OpAssignStmt::new(var, IntExpr::new_i32(2).as_arith_expr(), BinaryOp::SHR);
+        assert_eq!(stmt.to_string(), "b = (b).wrapping_shr((2i32) as u32);");
     }
 }

@@ -6,12 +6,21 @@ use super::super::EnumWeights;
 pub enum ArithmeticExprVariants {
     Int,
     Binary,
+    Cast,
+    Unary,
     Var,
     Func,
 }
 
 impl ArithmeticExprVariants {
-    pub const ALL: &'static [Self] = &[Self::Int, Self::Binary, Self::Var, Self::Func];
+    pub const ALL: &'static [Self] = &[
+        Self::Int,
+        Self::Binary,
+        Self::Cast,
+        Self::Unary,
+        Self::Var,
+        Self::Func,
+    ];
 }
 
 #[derive(Clone, Copy)]

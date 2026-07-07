@@ -3,7 +3,9 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::program::{
     expr::{
-        arithmetic_expr::{ArithmeticExpr, BinaryExpr, BinaryOp, IntExpr, IntValue},
+        arithmetic_expr::{
+            ArithmeticExpr, BinaryExpr, BinaryOp, CastExpr, IntExpr, IntValue, UnaryExpr, UnaryOp,
+        },
         bool_expr::{
             BinBoolExpr, BoolExpr, BoolOp, BoolValue, ComparisonExpr, ComparisonOp, NegationExpr,
         },
@@ -222,6 +224,8 @@ impl<'table> ExprGenerator<'table> {
         match expr_choice {
             ArithmeticExprVariants::Int => Some(self.int_expr(rng).as_arith_expr()),
             ArithmeticExprVariants::Binary => Some(self.binary_int_expr(rng).as_arith_expr()),
+            ArithmeticExprVariants::Cast => Some(self.cast_expr(rng).as_arith_expr()),
+            ArithmeticExprVariants::Unary => Some(self.unary_expr(rng).as_arith_expr()),
             ArithmeticExprVariants::Var => {
                 let arith_var_filter = Filters::new().with_filters(vec![
                     is_var_filter(),
@@ -265,9 +269,48 @@ impl<'table> ExprGenerator<'table> {
         let op: BinaryOp = rng.gen();
 
         let left = self.arith_expr(rng);
-        let right = self.arith_expr(rng);
+        let right = match op {
+            // The shift amount is emitted with an `as u32` cast, so it can be
+            // any int type independent of the generator's target type.
+            BinaryOp::SHL | BinaryOp::SHR => {
+                let amount_type: IntTypeID = rng.gen();
+                let generator =
+                    ExprGenerator::new_sub_expr(self, amount_type.as_type(), BorrowTypeID::None);
+                generator.arith_expr(rng)
+            }
+            _ => self.arith_expr(rng),
+        };
 
         BinaryExpr::new(left, right, op)
+    }
+
+    // Cast source type is chosen at random, independent of the target type:
+    // int-to-int casts are fully defined for every width pair (truncate /
+    // sign-extend / zero-extend). Occasionally a bool source is used, going
+    // through u8 first (bool only casts to numeric types).
+    fn cast_expr<R: Rng>(&self, rng: &mut R) -> CastExpr {
+        let target = if let TypeID::IntType(int_type_id) = self.type_id {
+            int_type_id
+        } else {
+            panic!("Cast expr called but generator not instantiated with integer type")
+        };
+
+        if rng.gen_range(0u32..8) == 0 {
+            let generator = ExprGenerator::new_sub_expr(self, TypeID::BoolType, BorrowTypeID::None);
+            CastExpr::new_from_bool(generator.bool_expr(rng), target)
+        } else {
+            let source_type: IntTypeID = rng.gen();
+            let generator =
+                ExprGenerator::new_sub_expr(self, source_type.as_type(), BorrowTypeID::None);
+            CastExpr::new_from_int(generator.arith_expr(rng), target)
+        }
+    }
+
+    fn unary_expr<R: Rng>(&self, rng: &mut R) -> UnaryExpr {
+        let op: UnaryOp = rng.gen();
+        let expr = self.arith_expr(rng);
+
+        UnaryExpr::new(expr, op)
     }
 
     fn int_expr<R: Rng>(&self, rng: &mut R) -> IntExpr {

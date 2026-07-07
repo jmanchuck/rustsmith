@@ -11,6 +11,8 @@ impl EnumWeights for ArithmeticExprVariants {
         match self {
             ArithmeticExprVariants::Int => 2,
             ArithmeticExprVariants::Binary => 4,
+            ArithmeticExprVariants::Cast => 2,
+            ArithmeticExprVariants::Unary => 2,
             ArithmeticExprVariants::Var => 2,
             ArithmeticExprVariants::Func => 2,
         }

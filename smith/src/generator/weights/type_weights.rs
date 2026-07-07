@@ -1,5 +1,6 @@
 use crate::program::expr::arithmetic_expr::BinaryOp;
 use crate::program::expr::arithmetic_expr::IntValue;
+use crate::program::expr::arithmetic_expr::UnaryOp;
 use crate::program::expr::bool_expr::{BoolOp, ComparisonOp};
 use crate::program::types::{BorrowTypeID, IntTypeID, TypeIDVariants};
 
@@ -90,6 +91,12 @@ impl IntValue {
 impl RandGen for BinaryOp {
     fn rand_gen<R: Rng>(rng: &mut R) -> BinaryOp {
         *BinaryOp::ALL.choose(rng).unwrap()
+    }
+}
+
+impl RandGen for UnaryOp {
+    fn rand_gen<R: Rng>(rng: &mut R) -> UnaryOp {
+        *UnaryOp::ALL.choose(rng).unwrap()
     }
 }
 
