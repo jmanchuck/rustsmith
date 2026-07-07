@@ -8,7 +8,7 @@ use crate::{
     program::{
         expr::{
             arithmetic_expr::{ArithmeticExpr, BinaryOp, IntExpr},
-            bool_expr::{BoolExpr, ComparisonExpr, ComparisonOp},
+            bool_expr::BoolExpr,
             expr::{Expr, RawExpr},
             iter_expr::IterRange,
         },
@@ -54,12 +54,12 @@ impl<'a> StmtGenerator<'a> {
         for _ in 0..consts::MAX_STMTS_IN_BLOCK {
             let mut stmt = self.stmt(Rc::clone(&context), rng);
             if let Stmt::LoopStatement(for_loop_stmt) = &mut stmt {
-                if rng.gen::<f32>() < consts::PROB_MAX_FOR_LOOP_ITERS {
-                    self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
-                }
+                self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
             }
             stmt_list.push(stmt);
         }
+
+        Self::append_checksum_folds(&mut stmt_list);
 
         context.borrow_mut().leave_scope();
 
@@ -73,29 +73,68 @@ impl<'a> StmtGenerator<'a> {
         rng: &mut R,
     ) -> BlockStmt {
         let mut stmt_list: Vec<Stmt> =
-            vec![self.global_struct_stmt(struct_template, Rc::clone(&context), rng)];
+            vec![self.global_struct_stmt(struct_template.clone(), Rc::clone(&context), rng)];
 
         for _ in 0..consts::MAX_STMTS_IN_BLOCK {
             let mut stmt = self.stmt(Rc::clone(&context), rng);
             if let Stmt::LoopStatement(for_loop_stmt) = &mut stmt {
-                if rng.gen::<f32>() < consts::PROB_MAX_FOR_LOOP_ITERS {
-                    self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
-                }
+                self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
             }
             stmt_list.push(stmt);
         }
 
-        let print_serialized = RawExpr::new(format!(
-            "println!(\"{{}}\", (serde_json::to_string(&{}).unwrap()))",
-            struct_gen::GLOBAL_STRUCT_VAR_NAME
-        ))
-        .as_expr();
+        Self::append_checksum_folds(&mut stmt_list);
 
-        let print_stmt = ExprStmt::new(print_serialized).as_stmt();
+        // Fold every field of the global struct into the checksum, then print
+        // it — the single observable output of the program.
+        for (field_name, _) in self.struct_table.flatten_struct_template(&struct_template) {
+            let fold = RawExpr::new(format!(
+                "cs({}{} as u128)",
+                struct_gen::GLOBAL_STRUCT_VAR_NAME,
+                field_name
+            ))
+            .as_expr();
+            stmt_list.push(ExprStmt::new(fold).as_stmt());
+        }
+
+        let print_stmt = ExprStmt::new(
+            RawExpr::new("println!(\"{}\", CHECKSUM.load(Ordering::Relaxed))".to_string())
+                .as_expr(),
+        )
+        .as_stmt();
 
         stmt_list.push(print_stmt);
 
         BlockStmt::new_from_vec(stmt_list)
+    }
+
+    // Folds every owned int- or bool-typed local in the block into the global
+    // checksum at scope exit, so computation feeding any local is observable
+    // and cannot be eliminated as dead code (Csmith's trick).
+    //
+    // Reference-typed lets are skipped: reading them at scope exit would
+    // extend their borrow past where non-lexical lifetimes ended it, and the
+    // generator emits code that is only legal under that early end (e.g.
+    // assigning to the borrowed variable right after the reference's last
+    // use). The referenced locals are folded directly instead. Struct locals
+    // are skipped because they may have been moved.
+    fn append_checksum_folds(stmt_list: &mut Vec<Stmt>) {
+        let mut folds: Vec<Stmt> = Vec::new();
+        for stmt in stmt_list.iter().rev() {
+            if let Stmt::LetStatement(let_stmt) = stmt {
+                let var = let_stmt.var();
+                match var.get_type() {
+                    TypeID::IntType(_) | TypeID::BoolType => (),
+                    _ => continue,
+                }
+                if var.get_borrow_type() != BorrowTypeID::None {
+                    continue;
+                }
+                let fold = RawExpr::new(format!("cs({} as u128)", var.get_name())).as_expr();
+                folds.push(ExprStmt::new(fold).as_stmt());
+            }
+        }
+        stmt_list.extend(folds);
     }
 
     pub fn block_stmt_with_return<R: Rng>(
@@ -269,29 +308,28 @@ impl<'a> StmtGenerator<'a> {
     }
 
     // Takes the stmt list being generated, inserts an initialiser variable
-    // Insert a conditional statement into loop to check if initialiser variable > max
-    // Insert an increment statement into loop at the end
+    // before the loop, and appends a break check + increment inside the loop.
+    // The break fires either when this loop's own counter exceeds the per-loop
+    // cap or when the program-wide fuel supply (see the emitted prelude) is
+    // exhausted — the latter bounds total work even when loops multiply
+    // through nested function calls.
     fn inject_loop_stopper(&mut self, stmt_list: &mut Vec<Stmt>, loop_stmt: &mut ForLoopStmt) {
         let counter_name = self.var_name_gen.next().unwrap();
-        let counter_var = Var::new(IntTypeID::U32.as_type(), counter_name, true);
+        let counter_var = Var::new(IntTypeID::U32.as_type(), counter_name.clone(), true);
         let counter_val = IntExpr::new_u32(0).as_expr();
         let counter_let_stmt = LetStmt::new(counter_var.clone(), counter_val).as_stmt();
 
         stmt_list.push(counter_let_stmt);
 
-        let comparison_val = IntExpr::new_u32(consts::MAX_FOR_LOOP_ITERS);
-        let comparison_expr = ComparisonExpr::new(
-            counter_var.clone().into(),
-            comparison_val.as_arith_expr(),
-            ComparisonOp::Greater,
+        let break_stmt = ExprStmt::new(
+            RawExpr::new(format!(
+                "if {} > {}u32 || fuel_exhausted() {{ break; }}",
+                counter_name,
+                consts::MAX_FOR_LOOP_ITERS
+            ))
+            .as_expr(),
         )
-        .as_bool_expr();
-        let break_block = BlockStmt::new_from_vec(vec![ExprStmt::new(
-            RawExpr::new("break".to_string()).as_expr(),
-        )
-        .as_stmt()]);
-        let mut loop_break_stmt = ConditionalStmt::new();
-        loop_break_stmt.insert_conditional(comparison_expr, break_block);
+        .as_stmt();
 
         let increment_stmt = OpAssignStmt::new(
             counter_var,
@@ -299,7 +337,7 @@ impl<'a> StmtGenerator<'a> {
             BinaryOp::ADD,
         );
 
-        loop_stmt.push_stmt(loop_break_stmt.as_stmt());
+        loop_stmt.push_stmt(break_stmt);
         loop_stmt.push_stmt(increment_stmt.as_stmt());
     }
 
@@ -468,7 +506,13 @@ impl<'a> StmtGenerator<'a> {
         let op = rng.gen();
         let lhs_var = Var::new(type_id, var_name.clone(), false);
 
-        OpAssignStmt::new(lhs_var, expr, op)
+        // A &mut variable needs an explicit deref for `x = x.wrapping_add(..)`
+        // (auto-deref only applied to the old method-call form), but not a
+        // field of a mut-ref struct.
+        let deref =
+            scope_entry.is_borrow_type(BorrowTypeID::MutRef) && !var_name.contains('.');
+
+        OpAssignStmt::new_with_deref(lhs_var, expr, op, deref)
     }
 
     pub fn global_struct_stmt<R: Rng>(

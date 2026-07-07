@@ -6,8 +6,9 @@ use super::{
     scope_entry::StructScopeEntry, stmt_gen::StmtGenerator, struct_gen, struct_gen::StructTable,
 };
 use crate::program::{
+    expr::expr::RawExpr,
     function::{Function, Param},
-    stmt::block_stmt::BlockStmt,
+    stmt::{block_stmt::BlockStmt, expr_stmt::ExprStmt},
     types::{BorrowTypeID, TypeID},
     var::Var,
 };
@@ -161,6 +162,23 @@ impl<'a> FuncGenerator<'a> {
         } else {
             block_stmt =
                 stmt_generator.block_stmt_with_return(Rc::clone(&context), rng, return_type.clone())
+        }
+
+        // Fold int/bool params into the checksum at function entry so unused
+        // parameters (and the argument expressions feeding them) stay live.
+        // Prepended before the body, where nothing is borrowed yet.
+        let mut block_stmt = block_stmt;
+        for param in params.iter() {
+            match param.get_type() {
+                TypeID::IntType(_) | TypeID::BoolType => (),
+                _ => continue,
+            }
+            let deref = match param.get_borrow_type() {
+                BorrowTypeID::None => "",
+                _ => "*",
+            };
+            let fold = RawExpr::new(format!("cs({}{} as u128)", deref, param.get_name())).as_expr();
+            block_stmt.push_front(ExprStmt::new(fold).as_stmt());
         }
 
         context.borrow_mut().leave_scope();

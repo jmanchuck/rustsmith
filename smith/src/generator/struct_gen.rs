@@ -52,8 +52,6 @@ impl StructTable {
             struct_template.insert_field(field_name_gen.next().unwrap(), rand_int_type.as_type());
         }
 
-        struct_template.insert_derive_attribute(String::from("Serialize"));
-
         self.global_struct = Some(struct_template.clone());
 
         struct_template

@@ -86,17 +86,36 @@ impl BinaryExpr {
     }
 
     pub fn to_string_safe(&self) -> String {
-        // This has the form of 5.checked_add(6u8) where 5 and 6 are literal u8 expressions
-        // The annotation is only required when a literal is provided as argument
-        // The checked arithmetic operations require type annotations in the argument
+        // The receiver is always parenthesized: a negative literal receiver
+        // like -5i8.wrapping_add(x) would otherwise parse as
+        // -(5i8.wrapping_add(x)).
+        //
+        // Division and remainder bind both operands to locals before the
+        // checked call because operands may contain function calls with &mut
+        // side effects, so they must be evaluated exactly once. The fallback
+        // value on None (division by zero, or MIN / -1) is the left operand,
+        // which is deterministic.
+        let left = self.left.to_string();
+        let right = self.right.to_string();
         match self.op {
-            BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => self.to_string(),
-            _ => format!(
-                "{}.{}({})",
-                self.left.to_string(),
-                self.op.to_string_safe(),
-                self.right.to_string(),
-            ),
+            BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => {
+                format!("({} {} {})", left, self.op.to_string(), right)
+            }
+            BinaryOp::DIV | BinaryOp::MOD => {
+                let method = if let BinaryOp::DIV = self.op {
+                    "checked_div"
+                } else {
+                    "checked_rem"
+                };
+                // Parenthesized because a bare block in expression-with-block
+                // positions (for-loop headers, if conditions) would be parsed
+                // as the loop/if body instead of an operand.
+                format!(
+                    "({{ let lhs = {}; let rhs = {}; lhs.{}(rhs).unwrap_or(lhs) }})",
+                    left, right, method
+                )
+            }
+            _ => format!("({}).{}({})", left, self.op.to_string_safe(), right),
         }
     }
 }
@@ -138,27 +157,14 @@ impl BinaryOp {
 
     pub fn to_string_safe(&self) -> String {
         match self {
-            BinaryOp::ADD => String::from("safe_add"),
-            BinaryOp::SUB => String::from("safe_sub"),
-            BinaryOp::MUL => String::from("safe_mul"),
-            BinaryOp::DIV => String::from("safe_div"),
-            BinaryOp::MOD => String::from("safe_modulo"),
-            BinaryOp::BITAND => String::from("bit_and"),
-            BinaryOp::BITOR => String::from("bit_or"),
-            BinaryOp::BITXOR => String::from("bit_xor"),
-        }
-    }
-
-    pub fn to_string_self_safe(&self) -> String {
-        match self {
-            BinaryOp::ADD => String::from("safe_self_add"),
-            BinaryOp::SUB => String::from("safe_self_sub"),
-            BinaryOp::MUL => String::from("safe_self_mul"),
-            BinaryOp::DIV => String::from("safe_self_div"),
-            BinaryOp::MOD => String::from("safe_self_modulo"),
-            BinaryOp::BITAND => String::from("bit_self_and"),
-            BinaryOp::BITOR => String::from("bit_self_or"),
-            BinaryOp::BITXOR => String::from("bit_self_xor"),
+            BinaryOp::ADD => String::from("wrapping_add"),
+            BinaryOp::SUB => String::from("wrapping_sub"),
+            BinaryOp::MUL => String::from("wrapping_mul"),
+            BinaryOp::DIV => String::from("checked_div"),
+            BinaryOp::MOD => String::from("checked_rem"),
+            BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => {
+                panic!("Bitwise ops are emitted as native operators")
+            }
         }
     }
 }

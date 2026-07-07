@@ -14,6 +14,10 @@ impl LetStmt {
     pub fn is_mut(&self) -> bool {
         self.var.is_mut()
     }
+
+    pub fn var(&self) -> &Var {
+        &self.var
+    }
 }
 
 impl LetStmt {
