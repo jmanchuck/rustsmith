@@ -1,3 +1,4 @@
+pub mod array_assign_stmt;
 pub mod assign_stmt;
 pub mod block_stmt;
 pub mod conditional_stmt;

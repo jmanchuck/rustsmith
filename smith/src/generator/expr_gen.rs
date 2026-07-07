@@ -3,7 +3,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::program::{
     expr::{
-        arithmetic_expr::{ArithmeticExpr, BinaryExpr, BinaryOp, IntExpr, IntValue},
+        arithmetic_expr::{
+            ArithmeticExpr, BinaryExpr, BinaryOp, CastExpr, IntExpr, IntValue, UnaryExpr, UnaryOp,
+        },
+        array_expr::{ArrayExpr, ArrayIndexExpr, ArrayLiteralExpr, ArrayRepeatExpr},
         bool_expr::{
             BinBoolExpr, BoolExpr, BoolOp, BoolValue, ComparisonExpr, ComparisonOp, NegationExpr,
         },
@@ -14,10 +17,10 @@ use crate::program::{
     },
     function::FunctionTemplate,
     struct_template::StructTemplate,
-    types::{BorrowStatus, BorrowTypeID, IntTypeID, TypeID},
+    types::{ArrayTypeID, BorrowStatus, BorrowTypeID, IntTypeID, TypeID},
     var::Var,
 };
-use rand::{seq::SliceRandom, Rng};
+use crate::rng::{Rng, SliceChoose};
 
 use super::{
     consts, context::Context, filters::*, scope_entry::ScopeEntry, struct_gen::StructTable,
@@ -68,6 +71,7 @@ impl<'table> ExprGenerator<'table> {
                 TypeID::StructType(struct_name) => {
                     self.struct_expr(struct_name.clone(), rng).as_expr()
                 }
+                TypeID::ArrayType(array_type) => self.array_expr(*array_type, rng).as_expr(),
                 TypeID::BoolType => self.bool_expr(rng).as_expr(),
                 TypeID::NullType => panic!("Tried to construct an expression of null type"),
             }
@@ -86,6 +90,9 @@ impl<'table> ExprGenerator<'table> {
                 )
                 .as_struct_expr()
                 .as_expr(),
+            TypeID::ArrayType(array_type) => {
+                self.array_literal_of_int_literals(*array_type, rng).as_expr()
+            }
             TypeID::BoolType => self.bool_literal(rng).as_bool_expr().as_expr(),
             TypeID::NullType => panic!("Tried to construct an expression of null type"),
         }
@@ -214,6 +221,77 @@ impl<'table> ExprGenerator<'table> {
         StructLiteral::new(struct_template, field_values)
     }
 
+    // RHS of an array let or whole-array assign. Elements are ordinary
+    // depth-capped int expressions; occasionally the repeat form `[e; LEN]`
+    // is used instead of a full element list.
+    fn array_expr<R: Rng>(&self, array_type: ArrayTypeID, rng: &mut R) -> ArrayExpr {
+        let elem_generator =
+            ExprGenerator::new_sub_expr(self, array_type.elem.as_type(), BorrowTypeID::None);
+
+        if rng.gen_range(0u32..4) == 0 {
+            let element: ArithmeticExpr = elem_generator.expr(rng).into();
+            ArrayRepeatExpr::new(array_type, element).as_array_expr()
+        } else {
+            let elements: Vec<ArithmeticExpr> = (0..array_type.len)
+                .map(|_| elem_generator.expr(rng).into())
+                .collect();
+            ArrayLiteralExpr::new(array_type, elements).as_array_expr()
+        }
+    }
+
+    // Depth-cap fallback: an array literal of int literals.
+    fn array_literal_of_int_literals<R: Rng>(
+        &self,
+        array_type: ArrayTypeID,
+        rng: &mut R,
+    ) -> ArrayExpr {
+        let elements: Vec<ArithmeticExpr> = (0..array_type.len)
+            .map(|_| IntExpr::new(IntValue::rand_from_type(array_type.elem, rng)).as_arith_expr())
+            .collect();
+        ArrayLiteralExpr::new(array_type, elements).as_array_expr()
+    }
+
+    // Guarded element read `arr[((idx) as usize) % LEN]` from an in-scope
+    // array whose element type matches the requested int type. The index
+    // expression is an ordinary int expression of a random type; the modulo
+    // guard makes any value in-bounds. Returns None when no suitable array
+    // is in scope so the caller rerolls another variant.
+    fn try_array_index_expr<R: Rng>(&self, rng: &mut R) -> Option<ArithmeticExpr> {
+        if self.borrow_type_id != BorrowTypeID::None {
+            return None;
+        }
+        let elem_type = if let TypeID::IntType(int_type_id) = self.type_id {
+            int_type_id
+        } else {
+            return None;
+        };
+
+        let array_filter = Filters::new().with_filters(vec![
+            is_var_filter(),
+            is_array_of_elem_filter(elem_type),
+            is_not_mut_borrowed_filter(),
+        ]);
+
+        let candidates = array_filter.filter(&self.context.borrow().scope);
+        let (array_name, (scope_entry, _)) = match candidates.choose(rng) {
+            Some(choice) => choice,
+            None => return None,
+        };
+
+        let array_type = if let TypeID::ArrayType(array_type) = scope_entry.get_type() {
+            array_type
+        } else {
+            return None;
+        };
+
+        let idx_type: IntTypeID = rng.gen();
+        let idx_generator =
+            ExprGenerator::new_sub_expr(self, idx_type.as_type(), BorrowTypeID::None);
+        let index = idx_generator.arith_expr(rng);
+
+        Some(ArrayIndexExpr::new(array_name.clone(), array_type, index).as_arith_expr())
+    }
+
     fn try_arith_expr<R: Rng>(
         &self,
         expr_choice: ArithmeticExprVariants,
@@ -222,6 +300,9 @@ impl<'table> ExprGenerator<'table> {
         match expr_choice {
             ArithmeticExprVariants::Int => Some(self.int_expr(rng).as_arith_expr()),
             ArithmeticExprVariants::Binary => Some(self.binary_int_expr(rng).as_arith_expr()),
+            ArithmeticExprVariants::Cast => Some(self.cast_expr(rng).as_arith_expr()),
+            ArithmeticExprVariants::Unary => Some(self.unary_expr(rng).as_arith_expr()),
+            ArithmeticExprVariants::ArrayIndex => self.try_array_index_expr(rng),
             ArithmeticExprVariants::Var => {
                 let arith_var_filter = Filters::new().with_filters(vec![
                     is_var_filter(),
@@ -265,9 +346,48 @@ impl<'table> ExprGenerator<'table> {
         let op: BinaryOp = rng.gen();
 
         let left = self.arith_expr(rng);
-        let right = self.arith_expr(rng);
+        let right = match op {
+            // The shift amount is emitted with an `as u32` cast, so it can be
+            // any int type independent of the generator's target type.
+            BinaryOp::SHL | BinaryOp::SHR => {
+                let amount_type: IntTypeID = rng.gen();
+                let generator =
+                    ExprGenerator::new_sub_expr(self, amount_type.as_type(), BorrowTypeID::None);
+                generator.arith_expr(rng)
+            }
+            _ => self.arith_expr(rng),
+        };
 
         BinaryExpr::new(left, right, op)
+    }
+
+    // Cast source type is chosen at random, independent of the target type:
+    // int-to-int casts are fully defined for every width pair (truncate /
+    // sign-extend / zero-extend). Occasionally a bool source is used, going
+    // through u8 first (bool only casts to numeric types).
+    fn cast_expr<R: Rng>(&self, rng: &mut R) -> CastExpr {
+        let target = if let TypeID::IntType(int_type_id) = self.type_id {
+            int_type_id
+        } else {
+            panic!("Cast expr called but generator not instantiated with integer type")
+        };
+
+        if rng.gen_range(0u32..8) == 0 {
+            let generator = ExprGenerator::new_sub_expr(self, TypeID::BoolType, BorrowTypeID::None);
+            CastExpr::new_from_bool(generator.bool_expr(rng), target)
+        } else {
+            let source_type: IntTypeID = rng.gen();
+            let generator =
+                ExprGenerator::new_sub_expr(self, source_type.as_type(), BorrowTypeID::None);
+            CastExpr::new_from_int(generator.arith_expr(rng), target)
+        }
+    }
+
+    fn unary_expr<R: Rng>(&self, rng: &mut R) -> UnaryExpr {
+        let op: UnaryOp = rng.gen();
+        let expr = self.arith_expr(rng);
+
+        UnaryExpr::new(expr, op)
     }
 
     fn int_expr<R: Rng>(&self, rng: &mut R) -> IntExpr {

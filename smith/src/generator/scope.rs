@@ -2,7 +2,7 @@
 /// Accessed by the Context struct in context.rs
 use std::{cell::RefCell, collections::BTreeMap, fmt, rc::Rc};
 
-use rand::{prelude::SliceRandom, Rng};
+use crate::rng::{Rng, SliceChoose};
 
 use crate::program::types::{BorrowStatus, BorrowTypeID};
 

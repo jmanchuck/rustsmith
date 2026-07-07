@@ -1,6 +1,4 @@
-use strum_macros::{EnumCount, EnumDiscriminants, EnumIter};
-
-#[derive(Debug, Copy, Clone, PartialEq, EnumIter)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum BorrowTypeID {
     None,
     Ref,
@@ -8,6 +6,8 @@ pub enum BorrowTypeID {
 }
 
 impl BorrowTypeID {
+    pub const ALL: &'static [Self] = &[Self::None, Self::Ref, Self::MutRef];
+
     pub fn as_borrow_status(self) -> BorrowStatus {
         match self {
             BorrowTypeID::None => BorrowStatus::None,
@@ -34,15 +34,52 @@ pub enum BorrowStatus {
     None,
 }
 
-#[derive(PartialEq, Clone, Hash, Eq, EnumDiscriminants, Debug)]
-#[strum_discriminants(vis(pub))]
-#[strum_discriminants(name(TypeIDVariants))]
-#[strum_discriminants(derive(EnumCount, EnumIter))]
+#[derive(PartialEq, Clone, Hash, Eq, Debug)]
 pub enum TypeID {
     IntType(IntTypeID),
     StructType(String), // String to denote the struct name
+    ArrayType(ArrayTypeID),
     BoolType,
     NullType,
+}
+
+/// Discriminants of `TypeID` (hand-written replacement for strum's
+/// `EnumDiscriminants` derive).
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum TypeIDVariants {
+    IntType,
+    StructType,
+    ArrayType,
+    BoolType,
+    NullType,
+}
+
+impl TypeIDVariants {
+    pub const ALL: &'static [Self] = &[
+        Self::IntType,
+        Self::StructType,
+        Self::ArrayType,
+        Self::BoolType,
+        Self::NullType,
+    ];
+}
+
+impl From<&TypeID> for TypeIDVariants {
+    fn from(type_id: &TypeID) -> Self {
+        match type_id {
+            TypeID::IntType(_) => Self::IntType,
+            TypeID::StructType(_) => Self::StructType,
+            TypeID::ArrayType(_) => Self::ArrayType,
+            TypeID::BoolType => Self::BoolType,
+            TypeID::NullType => Self::NullType,
+        }
+    }
+}
+
+impl From<TypeID> for TypeIDVariants {
+    fn from(type_id: TypeID) -> Self {
+        Self::from(&type_id)
+    }
 }
 
 impl TypeID {
@@ -50,9 +87,33 @@ impl TypeID {
         match self {
             Self::IntType(int_type_id) => int_type_id.to_string(),
             Self::StructType(string) => string.clone(),
+            Self::ArrayType(array_type_id) => array_type_id.to_string(),
             &Self::BoolType => String::from("bool"),
             Self::NullType => String::from(""),
         }
+    }
+}
+
+/// Fixed-size array of integers, e.g. `[i32; 4]`. Phase 1 keeps arrays
+/// minimal and sound: int elements only, owned lets only (no borrows, no
+/// struct fields, no function params/returns).
+#[derive(PartialEq, Clone, Hash, Eq, Copy, Debug)]
+pub struct ArrayTypeID {
+    pub elem: IntTypeID,
+    pub len: usize,
+}
+
+impl ArrayTypeID {
+    pub fn new(elem: IntTypeID, len: usize) -> Self {
+        ArrayTypeID { elem, len }
+    }
+
+    pub fn as_type(self) -> TypeID {
+        TypeID::ArrayType(self)
+    }
+
+    pub fn to_string(&self) -> String {
+        format!("[{}; {}]", self.elem.to_string(), self.len)
     }
 }
 
@@ -88,5 +149,17 @@ impl IntTypeID {
 
     pub fn as_type(self) -> TypeID {
         TypeID::IntType(self)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn array_type_has_correct_string_representation() {
+        let array_type = ArrayTypeID::new(IntTypeID::I32, 4);
+        assert_eq!(array_type.to_string(), "[i32; 4]");
+        assert_eq!(array_type.as_type().to_string(), "[i32; 4]");
     }
 }

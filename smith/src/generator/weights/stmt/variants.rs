@@ -1,13 +1,8 @@
-use rand::{
-    distributions::{Distribution, Standard, WeightedIndex},
-    Rng,
-};
-use strum::IntoEnumIterator;
-use strum_macros::{EnumCount, EnumIter};
+use crate::rng::{RandGen, Rng, WeightedIndex};
 
 use crate::generator::weights::EnumWeights;
 
-#[derive(EnumCount, EnumIter, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum StmtVariants {
     LetStatement,
     ConditionalStatement,
@@ -17,13 +12,22 @@ pub enum StmtVariants {
     FuncCallStatement,
 }
 
-impl Distribution<StmtVariants> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> StmtVariants {
-        let choices: Vec<StmtVariants> = StmtVariants::iter().collect();
+impl StmtVariants {
+    pub const ALL: &'static [Self] = &[
+        Self::LetStatement,
+        Self::ConditionalStatement,
+        Self::AssignStatement,
+        Self::LoopStatement,
+        Self::OpAssignStatement,
+        Self::FuncCallStatement,
+    ];
+}
 
+impl RandGen for StmtVariants {
+    fn rand_gen<R: Rng>(rng: &mut R) -> StmtVariants {
         let dist = WeightedIndex::new(StmtVariants::weights()).unwrap();
         let idx = dist.sample(rng);
 
-        choices[idx]
+        StmtVariants::ALL[idx]
     }
 }

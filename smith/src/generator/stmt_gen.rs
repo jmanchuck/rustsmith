@@ -1,24 +1,24 @@
 /// Generates statements
 use std::{cell::RefCell, rc::Rc};
 
-use rand::{prelude::SliceRandom, Rng};
+use crate::rng::{Rng, SliceChoose};
 
 use crate::{
     generator::filters::*,
     program::{
         expr::{
             arithmetic_expr::{ArithmeticExpr, BinaryOp, IntExpr},
-            bool_expr::{BoolExpr, ComparisonExpr, ComparisonOp},
+            bool_expr::BoolExpr,
             expr::{Expr, RawExpr},
             iter_expr::IterRange,
         },
         stmt::{
-            assign_stmt::AssignStmt, block_stmt::BlockStmt, conditional_stmt::ConditionalStmt,
-            expr_stmt::ExprStmt, for_loop_stmt::ForLoopStmt, let_stmt::LetStmt,
-            op_assign_stmt::OpAssignStmt, return_stmt::ReturnStmt, stmt::Stmt,
+            array_assign_stmt::ArrayAssignStmt, assign_stmt::AssignStmt, block_stmt::BlockStmt,
+            conditional_stmt::ConditionalStmt, expr_stmt::ExprStmt, for_loop_stmt::ForLoopStmt,
+            let_stmt::LetStmt, op_assign_stmt::OpAssignStmt, return_stmt::ReturnStmt, stmt::Stmt,
         },
         struct_template::StructTemplate,
-        types::{BorrowTypeID, IntTypeID, TypeID},
+        types::{ArrayTypeID, BorrowTypeID, IntTypeID, TypeID},
         var::Var,
     },
 };
@@ -54,12 +54,12 @@ impl<'a> StmtGenerator<'a> {
         for _ in 0..consts::MAX_STMTS_IN_BLOCK {
             let mut stmt = self.stmt(Rc::clone(&context), rng);
             if let Stmt::LoopStatement(for_loop_stmt) = &mut stmt {
-                if rng.gen::<f32>() < consts::PROB_MAX_FOR_LOOP_ITERS {
-                    self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
-                }
+                self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
             }
             stmt_list.push(stmt);
         }
+
+        Self::append_checksum_folds(&mut stmt_list);
 
         context.borrow_mut().leave_scope();
 
@@ -73,29 +73,77 @@ impl<'a> StmtGenerator<'a> {
         rng: &mut R,
     ) -> BlockStmt {
         let mut stmt_list: Vec<Stmt> =
-            vec![self.global_struct_stmt(struct_template, Rc::clone(&context), rng)];
+            vec![self.global_struct_stmt(struct_template.clone(), Rc::clone(&context), rng)];
 
         for _ in 0..consts::MAX_STMTS_IN_BLOCK {
             let mut stmt = self.stmt(Rc::clone(&context), rng);
             if let Stmt::LoopStatement(for_loop_stmt) = &mut stmt {
-                if rng.gen::<f32>() < consts::PROB_MAX_FOR_LOOP_ITERS {
-                    self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
-                }
+                self.inject_loop_stopper(&mut stmt_list, for_loop_stmt);
             }
             stmt_list.push(stmt);
         }
 
-        let print_serialized = RawExpr::new(format!(
-            "println!(\"{{}}\", (serde_json::to_string(&{}).unwrap()))",
-            struct_gen::GLOBAL_STRUCT_VAR_NAME
-        ))
-        .as_expr();
+        Self::append_checksum_folds(&mut stmt_list);
 
-        let print_stmt = ExprStmt::new(print_serialized).as_stmt();
+        // Fold every field of the global struct into the checksum, then print
+        // it — the single observable output of the program.
+        for (field_name, _) in self.struct_table.flatten_struct_template(&struct_template) {
+            let fold = RawExpr::new(format!(
+                "cs({}{} as u128)",
+                struct_gen::GLOBAL_STRUCT_VAR_NAME,
+                field_name
+            ))
+            .as_expr();
+            stmt_list.push(ExprStmt::new(fold).as_stmt());
+        }
+
+        let print_stmt = ExprStmt::new(
+            RawExpr::new("println!(\"{}\", CHECKSUM.load(Ordering::Relaxed))".to_string())
+                .as_expr(),
+        )
+        .as_stmt();
 
         stmt_list.push(print_stmt);
 
         BlockStmt::new_from_vec(stmt_list)
+    }
+
+    // Folds every owned int- or bool-typed local in the block into the global
+    // checksum at scope exit, so computation feeding any local is observable
+    // and cannot be eliminated as dead code (Csmith's trick).
+    //
+    // Reference-typed lets are skipped: reading them at scope exit would
+    // extend their borrow past where non-lexical lifetimes ended it, and the
+    // generator emits code that is only legal under that early end (e.g.
+    // assigning to the borrowed variable right after the reference's last
+    // use). The referenced locals are folded directly instead. Struct locals
+    // are skipped because they may have been moved.
+    //
+    // Array locals are folded element-wise via `.iter()` rather than by
+    // index, so the folds cannot mask a bounds-check-elision bug in the
+    // guarded index reads/writes being tested.
+    fn append_checksum_folds(stmt_list: &mut Vec<Stmt>) {
+        let mut folds: Vec<Stmt> = Vec::new();
+        for stmt in stmt_list.iter().rev() {
+            if let Stmt::LetStatement(let_stmt) = stmt {
+                let var = let_stmt.var();
+                if var.get_borrow_type() != BorrowTypeID::None {
+                    continue;
+                }
+                let fold = match var.get_type() {
+                    TypeID::IntType(_) | TypeID::BoolType => {
+                        RawExpr::new(format!("cs({} as u128)", var.get_name()))
+                    }
+                    TypeID::ArrayType(_) => RawExpr::new(format!(
+                        "for e in {}.iter() {{ cs(*e as u128); }}",
+                        var.get_name()
+                    )),
+                    _ => continue,
+                };
+                folds.push(ExprStmt::new(fold.as_expr()).as_stmt());
+            }
+        }
+        stmt_list.extend(folds);
     }
 
     pub fn block_stmt_with_return<R: Rng>(
@@ -146,7 +194,7 @@ impl<'a> StmtGenerator<'a> {
             }
             StmtVariants::AssignStatement => {
                 if context.borrow().scope.borrow().mut_count() > 0 {
-                    Some(self.assign_stmt(context, rng).as_stmt())
+                    Some(self.assign_stmt(context, rng))
                 } else {
                     None
                 }
@@ -198,8 +246,13 @@ impl<'a> StmtGenerator<'a> {
     }
 
     pub fn let_stmt<R: Rng>(&mut self, context: Rc<RefCell<Context>>, rng: &mut R) -> LetStmt {
-        let rand_type_id = self.struct_table.rand_type(rng);
-        let rand_borrow_type_id: BorrowTypeID = rng.gen();
+        let rand_type_id = self.struct_table.rand_type_for_let(rng);
+        // Arrays are only ever let-bound by value (phase 1: no array borrows).
+        let rand_borrow_type_id: BorrowTypeID = if let TypeID::ArrayType(_) = rand_type_id {
+            BorrowTypeID::None
+        } else {
+            rng.gen()
+        };
 
         let expr_generator = ExprGenerator::new(
             self.struct_table,
@@ -269,29 +322,28 @@ impl<'a> StmtGenerator<'a> {
     }
 
     // Takes the stmt list being generated, inserts an initialiser variable
-    // Insert a conditional statement into loop to check if initialiser variable > max
-    // Insert an increment statement into loop at the end
+    // before the loop, and appends a break check + increment inside the loop.
+    // The break fires either when this loop's own counter exceeds the per-loop
+    // cap or when the program-wide fuel supply (see the emitted prelude) is
+    // exhausted — the latter bounds total work even when loops multiply
+    // through nested function calls.
     fn inject_loop_stopper(&mut self, stmt_list: &mut Vec<Stmt>, loop_stmt: &mut ForLoopStmt) {
         let counter_name = self.var_name_gen.next().unwrap();
-        let counter_var = Var::new(IntTypeID::U32.as_type(), counter_name, true);
+        let counter_var = Var::new(IntTypeID::U32.as_type(), counter_name.clone(), true);
         let counter_val = IntExpr::new_u32(0).as_expr();
         let counter_let_stmt = LetStmt::new(counter_var.clone(), counter_val).as_stmt();
 
         stmt_list.push(counter_let_stmt);
 
-        let comparison_val = IntExpr::new_u32(consts::MAX_FOR_LOOP_ITERS);
-        let comparison_expr = ComparisonExpr::new(
-            counter_var.clone().into(),
-            comparison_val.as_arith_expr(),
-            ComparisonOp::Greater,
+        let break_stmt = ExprStmt::new(
+            RawExpr::new(format!(
+                "if {} > {}u32 || fuel_exhausted() {{ break; }}",
+                counter_name,
+                consts::MAX_FOR_LOOP_ITERS
+            ))
+            .as_expr(),
         )
-        .as_bool_expr();
-        let break_block = BlockStmt::new_from_vec(vec![ExprStmt::new(
-            RawExpr::new("break".to_string()).as_expr(),
-        )
-        .as_stmt()]);
-        let mut loop_break_stmt = ConditionalStmt::new();
-        loop_break_stmt.insert_conditional(comparison_expr, break_block);
+        .as_stmt();
 
         let increment_stmt = OpAssignStmt::new(
             counter_var,
@@ -299,7 +351,7 @@ impl<'a> StmtGenerator<'a> {
             BinaryOp::ADD,
         );
 
-        loop_stmt.push_stmt(loop_break_stmt.as_stmt());
+        loop_stmt.push_stmt(break_stmt);
         loop_stmt.push_stmt(increment_stmt.as_stmt());
     }
 
@@ -308,7 +360,7 @@ impl<'a> StmtGenerator<'a> {
         context: Rc<RefCell<Context>>,
         rng: &mut R,
     ) -> ForLoopStmt {
-        let rand_int_type: IntTypeID = rand::random();
+        let rand_int_type: IntTypeID = rng.gen();
         let rand_type = rand_int_type.as_type();
 
         context.borrow_mut().loop_depth += 1;
@@ -338,11 +390,7 @@ impl<'a> StmtGenerator<'a> {
         for_loop_stmt
     }
 
-    pub fn assign_stmt<R: Rng>(
-        &mut self,
-        context: Rc<RefCell<Context>>,
-        rng: &mut R,
-    ) -> AssignStmt {
+    pub fn assign_stmt<R: Rng>(&mut self, context: Rc<RefCell<Context>>, rng: &mut R) -> Stmt {
         let mut_filter = Filters::new().with_filters(vec![is_mut_or_mut_ref_filter()]);
         let mutables = mut_filter.filter(&context.borrow().scope);
 
@@ -361,6 +409,21 @@ impl<'a> StmtGenerator<'a> {
             .scope
             .borrow_mut()
             .func_mut_borrow(var_name);
+
+        // Mutable arrays mostly receive guarded element writes; occasionally
+        // the whole array is reassigned through the ordinary path below.
+        if let TypeID::ArrayType(array_type) = scope_entry.get_type() {
+            if rng.gen_range(0u32..4) > 0 {
+                let stmt = self.array_element_assign_stmt(
+                    Rc::clone(&context),
+                    var_name.clone(),
+                    array_type,
+                    rng,
+                );
+                context.borrow_mut().leave_scope();
+                return stmt;
+            }
+        }
 
         let expr_generator = ExprGenerator::new(
             self.struct_table,
@@ -386,7 +449,46 @@ impl<'a> StmtGenerator<'a> {
         let deref =
             scope_entry.is_borrow_type(BorrowTypeID::MutRef) && !left_var.get_name().contains('.');
 
-        AssignStmt::new(left_var, expr, deref)
+        AssignStmt::new(left_var, expr, deref).as_stmt()
+    }
+
+    // Guarded element write to a mutable in-scope array: either the plain
+    // form `arr[((idx) as usize) % LEN] = expr;` or one of the op-assign
+    // wrapping forms (see ArrayAssignStmt). Called inside the assign
+    // statement's temporary scope.
+    fn array_element_assign_stmt<R: Rng>(
+        &mut self,
+        context: Rc<RefCell<Context>>,
+        array_name: String,
+        array_type: ArrayTypeID,
+        rng: &mut R,
+    ) -> Stmt {
+        let idx_type: IntTypeID = rng.gen();
+        let idx_generator = ExprGenerator::new(
+            self.struct_table,
+            Rc::clone(&context),
+            idx_type.as_type(),
+            BorrowTypeID::None,
+        );
+        context.borrow_mut().reset_expr_depth();
+        let index: ArithmeticExpr = idx_generator.expr(rng).into();
+
+        let elem_generator = ExprGenerator::new(
+            self.struct_table,
+            Rc::clone(&context),
+            array_type.elem.as_type(),
+            BorrowTypeID::None,
+        );
+        context.borrow_mut().reset_expr_depth();
+        let rhs: ArithmeticExpr = elem_generator.expr(rng).into();
+
+        let op = if rng.gen::<bool>() {
+            Some(rng.gen::<BinaryOp>())
+        } else {
+            None
+        };
+
+        ArrayAssignStmt::new(array_name, array_type, index, rhs, op).as_stmt()
     }
 
     pub fn conditional_stmt<R: Rng>(
@@ -405,7 +507,7 @@ impl<'a> StmtGenerator<'a> {
         );
 
         loop {
-            if rng.gen_range(0.0..1.0)
+            if rng.gen_range(0.0f32..1.0)
                 < conditional_blocks.len() as f32 / consts::MAX_CONDITIONAL_BRANCHES as f32
             {
                 break;
@@ -468,7 +570,13 @@ impl<'a> StmtGenerator<'a> {
         let op = rng.gen();
         let lhs_var = Var::new(type_id, var_name.clone(), false);
 
-        OpAssignStmt::new(lhs_var, expr, op)
+        // A &mut variable needs an explicit deref for `x = x.wrapping_add(..)`
+        // (auto-deref only applied to the old method-call form), but not a
+        // field of a mut-ref struct.
+        let deref =
+            scope_entry.is_borrow_type(BorrowTypeID::MutRef) && !var_name.contains('.');
+
+        OpAssignStmt::new_with_deref(lhs_var, expr, op, deref)
     }
 
     pub fn global_struct_stmt<R: Rng>(
@@ -536,5 +644,31 @@ impl<'a> StmtGenerator<'a> {
             expr_generator.func_call_expr_from_template(func_entry.get_template(), rng);
 
         ExprStmt::new(func_call_expr.as_expr())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::program::expr::arithmetic_expr::IntExpr;
+    use crate::program::types::ArrayTypeID;
+
+    #[test]
+    fn checksum_folds_arrays_element_wise_via_iter() {
+        let int_var = Var::new(IntTypeID::U16.as_type(), "var_0".to_string(), false);
+        let int_let = LetStmt::new(int_var, IntExpr::new_u16(3).as_expr()).as_stmt();
+
+        let array_type = ArrayTypeID::new(IntTypeID::I8, 2);
+        let array_var = Var::new(array_type.as_type(), "var_1".to_string(), true);
+        let array_expr = RawExpr::new("[1i8, 2i8]".to_string()).as_expr();
+        let array_let = LetStmt::new(array_var, array_expr).as_stmt();
+
+        let mut stmt_list = vec![int_let, array_let];
+        StmtGenerator::append_checksum_folds(&mut stmt_list);
+
+        let rendered: Vec<String> = stmt_list.iter().map(|s| s.to_string()).collect();
+        assert_eq!(rendered.len(), 4);
+        assert_eq!(rendered[2], "for e in var_1.iter() { cs(*e as u128); };");
+        assert_eq!(rendered[3], "cs(var_0 as u128);");
     }
 }

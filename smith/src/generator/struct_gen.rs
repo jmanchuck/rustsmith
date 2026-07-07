@@ -2,9 +2,9 @@
 /// Main entry point in order to randomly select a type
 use crate::program::{
     struct_template::StructTemplate,
-    types::{IntTypeID, TypeID, TypeIDVariants},
+    types::{ArrayTypeID, IntTypeID, TypeID, TypeIDVariants},
 };
-use rand::{prelude::SliceRandom, Rng};
+use crate::rng::{Rng, SliceChoose};
 use std::{collections::BTreeMap, fmt};
 
 use super::name_gen::NameGenerator;
@@ -51,8 +51,6 @@ impl StructTable {
             let rand_int_type: IntTypeID = rng.gen();
             struct_template.insert_field(field_name_gen.next().unwrap(), rand_int_type.as_type());
         }
-
-        struct_template.insert_derive_attribute(String::from("Serialize"));
 
         self.global_struct = Some(struct_template.clone());
 
@@ -105,7 +103,7 @@ impl StructTable {
         let mut field_name_gen = NameGenerator::new(String::from("field_"));
         let mut struct_template = StructTemplate::new(name);
 
-        while rng.gen_range(0.0..1.0)
+        while rng.gen_range(0.0f32..1.0)
             > struct_template.num_fields() as f32 / MAX_STRUCT_FIELDS as f32
         {
             struct_template.insert_field(field_name_gen.next().unwrap(), self.rand_type(rng))
@@ -220,6 +218,47 @@ impl StructTable {
         }
     }
 
+    // Type selection for let bindings only: additionally offers fixed-size
+    // int arrays, which are deliberately kept out of struct fields, function
+    // params/returns and borrows (the other rand_type_* fns treat the
+    // ArrayType variant as a retry via their `_ => continue` arms).
+    pub fn rand_type_for_let<R: Rng>(&self, rng: &mut R) -> TypeID {
+        let mut loop_limit = 20;
+        loop {
+            let mut selected: TypeIDVariants = rng.gen();
+            loop_limit -= 1;
+            if loop_limit < 0 {
+                if rng.gen::<bool>() {
+                    selected = TypeIDVariants::IntType;
+                } else {
+                    selected = TypeIDVariants::BoolType;
+                }
+            }
+            match selected {
+                TypeIDVariants::StructType if self.len() > 0 => {
+                    return TypeID::StructType(self.get_random_struct_name(rng));
+                }
+
+                TypeIDVariants::IntType => {
+                    let int_type_id: IntTypeID = rng.gen();
+                    return int_type_id.as_type();
+                }
+
+                TypeIDVariants::ArrayType => {
+                    let array_type_id: ArrayTypeID = rng.gen();
+                    return array_type_id.as_type();
+                }
+
+                TypeIDVariants::BoolType => return TypeID::BoolType,
+
+                _ => {
+                    loop_limit -= 1;
+                    continue;
+                }
+            }
+        }
+    }
+
     pub fn rand_type_with_null<R: Rng>(&self, rng: &mut R) -> TypeID {
         let mut loop_limit = 20;
         loop {
@@ -267,7 +306,7 @@ mod test {
     #[test]
     fn creates_new_symbol_with_correct_name() {
         let mut table = StructTable::new();
-        table.gen_struct(&mut rand::thread_rng());
+        table.gen_struct(&mut crate::rng::SmithRng::seed_from_u64(0));
 
         assert_eq!(table.len(), 1);
     }

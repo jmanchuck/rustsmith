@@ -1,34 +1,27 @@
+use crate::generator::consts;
 use crate::program::expr::arithmetic_expr::BinaryOp;
 use crate::program::expr::arithmetic_expr::IntValue;
+use crate::program::expr::arithmetic_expr::UnaryOp;
 use crate::program::expr::bool_expr::{BoolOp, ComparisonOp};
-use crate::program::types::{BorrowTypeID, IntTypeID, TypeIDVariants};
+use crate::program::types::{ArrayTypeID, BorrowTypeID, IntTypeID, TypeIDVariants};
 
-use rand::prelude::SliceRandom;
-use rand::{
-    distributions::{Distribution, Standard},
-    Rng,
-};
-use strum::IntoEnumIterator;
+use crate::rng::{RandGen, Rng, SliceChoose};
 
 // Not weighted
-impl Distribution<TypeIDVariants> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> TypeIDVariants {
-        let choices: Vec<TypeIDVariants> = TypeIDVariants::iter().collect();
-
-        *(choices.choose(rng).unwrap())
+impl RandGen for TypeIDVariants {
+    fn rand_gen<R: Rng>(rng: &mut R) -> TypeIDVariants {
+        *(TypeIDVariants::ALL.choose(rng).unwrap())
     }
 }
 
-impl Distribution<BorrowTypeID> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BorrowTypeID {
-        let choices: Vec<BorrowTypeID> = BorrowTypeID::iter().collect();
-
-        *choices.choose(rng).unwrap()
+impl RandGen for BorrowTypeID {
+    fn rand_gen<R: Rng>(rng: &mut R) -> BorrowTypeID {
+        *BorrowTypeID::ALL.choose(rng).unwrap()
     }
 }
 
-impl Distribution<IntTypeID> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> IntTypeID {
+impl RandGen for IntTypeID {
+    fn rand_gen<R: Rng>(rng: &mut R) -> IntTypeID {
         match rng.gen_range(0..=9) {
             0 => IntTypeID::I8,
             1 => IntTypeID::I16,
@@ -96,16 +89,28 @@ impl IntValue {
     }
 }
 
-impl Distribution<BinaryOp> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BinaryOp {
-        let choices: Vec<BinaryOp> = BinaryOp::iter().collect();
-
-        *choices.choose(rng).unwrap()
+impl RandGen for ArrayTypeID {
+    fn rand_gen<R: Rng>(rng: &mut R) -> ArrayTypeID {
+        let elem: IntTypeID = rng.gen();
+        let len = *consts::ARRAY_LENS.choose(rng).unwrap();
+        ArrayTypeID::new(elem, len)
     }
 }
 
-impl Distribution<ComparisonOp> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ComparisonOp {
+impl RandGen for BinaryOp {
+    fn rand_gen<R: Rng>(rng: &mut R) -> BinaryOp {
+        *BinaryOp::ALL.choose(rng).unwrap()
+    }
+}
+
+impl RandGen for UnaryOp {
+    fn rand_gen<R: Rng>(rng: &mut R) -> UnaryOp {
+        *UnaryOp::ALL.choose(rng).unwrap()
+    }
+}
+
+impl RandGen for ComparisonOp {
+    fn rand_gen<R: Rng>(rng: &mut R) -> ComparisonOp {
         match rng.gen_range(0..=5) {
             0 => ComparisonOp::Greater,
             1 => ComparisonOp::GreaterEq,
@@ -117,8 +122,8 @@ impl Distribution<ComparisonOp> for Standard {
     }
 }
 
-impl Distribution<BoolOp> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BoolOp {
+impl RandGen for BoolOp {
+    fn rand_gen<R: Rng>(rng: &mut R) -> BoolOp {
         match rng.gen_range(0..=2) {
             0 => BoolOp::AND,
             _ => BoolOp::OR,

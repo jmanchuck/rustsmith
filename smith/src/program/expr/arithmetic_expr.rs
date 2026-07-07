@@ -1,13 +1,16 @@
-use super::{expr::Expr, func_call_expr::FunctionCallExpr};
+use super::{
+    array_expr::ArrayIndexExpr, bool_expr::BoolExpr, expr::Expr, func_call_expr::FunctionCallExpr,
+};
 use crate::program::{
     types::{IntTypeID, TypeID},
     var::Var,
 };
-use strum_macros::EnumIter;
-
 pub enum ArithmeticExpr {
     Int(IntExpr),
     Binary(Box<BinaryExpr>),
+    Cast(Box<CastExpr>),
+    Unary(Box<UnaryExpr>),
+    ArrayIndex(Box<ArrayIndexExpr>),
     Var(Var),
     Func(FunctionCallExpr),
 }
@@ -29,6 +32,9 @@ impl ArithmeticExpr {
         match self {
             Self::Int(s) => s.get_type(),
             Self::Binary(s) => s.get_type(),
+            Self::Cast(s) => s.get_type(),
+            Self::Unary(s) => s.get_type(),
+            Self::ArrayIndex(s) => s.get_type(),
             Self::Var(s) => s.get_type(),
             Self::Func(s) => s.get_type(),
         }
@@ -40,6 +46,9 @@ impl ToString for ArithmeticExpr {
         match self {
             Self::Int(s) => s.to_string(),
             Self::Binary(s) => (*s).to_string_safe(),
+            Self::Cast(s) => (*s).to_string(),
+            Self::Unary(s) => (*s).to_string_safe(),
+            Self::ArrayIndex(s) => (*s).to_string(),
             Self::Var(s) => s.to_string(),
             Self::Func(s) => s.to_string(),
         }
@@ -88,17 +97,49 @@ impl BinaryExpr {
     }
 
     pub fn to_string_safe(&self) -> String {
-        // This has the form of 5.checked_add(6u8) where 5 and 6 are literal u8 expressions
-        // The annotation is only required when a literal is provided as argument
-        // The checked arithmetic operations require type annotations in the argument
+        // The receiver is always parenthesized: a negative literal receiver
+        // like -5i8.wrapping_add(x) would otherwise parse as
+        // -(5i8.wrapping_add(x)).
+        //
+        // Division and remainder bind both operands to locals before the
+        // checked call because operands may contain function calls with &mut
+        // side effects, so they must be evaluated exactly once. The fallback
+        // value on None (division by zero, or MIN / -1) is the left operand,
+        // which is deterministic.
+        let left = self.left.to_string();
+        let right = self.right.to_string();
         match self.op {
-            BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => self.to_string(),
-            _ => format!(
-                "{}.{}({})",
-                self.left.to_string(),
-                self.op.to_string_safe(),
-                self.right.to_string(),
-            ),
+            BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => {
+                format!("({} {} {})", left, self.op.to_string(), right)
+            }
+            BinaryOp::DIV | BinaryOp::MOD => {
+                let method = if let BinaryOp::DIV = self.op {
+                    "checked_div"
+                } else {
+                    "checked_rem"
+                };
+                // Parenthesized because a bare block in expression-with-block
+                // positions (for-loop headers, if conditions) would be parsed
+                // as the loop/if body instead of an operand.
+                format!(
+                    "({{ let lhs = {}; let rhs = {}; lhs.{}(rhs).unwrap_or(lhs) }})",
+                    left, right, method
+                )
+            }
+            BinaryOp::SHL | BinaryOp::SHR => {
+                // wrapping_shl/shr because plain << / >> with an amount >=
+                // bit-width panics under overflow-checks=on and masks when
+                // off (a false divergence across fuzz configs); wrapping_*
+                // masks the amount identically in every config. The amount
+                // operand may be any int type, so it is cast to u32.
+                format!(
+                    "({}).{}(({}) as u32)",
+                    left,
+                    self.op.to_string_safe(),
+                    right
+                )
+            }
+            _ => format!("({}).{}({})", left, self.op.to_string_safe(), right),
         }
     }
 }
@@ -114,7 +155,7 @@ impl ToString for BinaryExpr {
     }
 }
 
-#[derive(Copy, Clone, EnumIter)]
+#[derive(Copy, Clone)]
 pub enum BinaryOp {
     ADD,
     SUB,
@@ -124,32 +165,36 @@ pub enum BinaryOp {
     BITAND,
     BITOR,
     BITXOR,
+    SHL,
+    SHR,
 }
 
 impl BinaryOp {
+    pub const ALL: &'static [Self] = &[
+        Self::ADD,
+        Self::SUB,
+        Self::MUL,
+        Self::DIV,
+        Self::MOD,
+        Self::BITAND,
+        Self::BITOR,
+        Self::BITXOR,
+        Self::SHL,
+        Self::SHR,
+    ];
+
     pub fn to_string_safe(&self) -> String {
         match self {
-            BinaryOp::ADD => String::from("safe_add"),
-            BinaryOp::SUB => String::from("safe_sub"),
-            BinaryOp::MUL => String::from("safe_mul"),
-            BinaryOp::DIV => String::from("safe_div"),
-            BinaryOp::MOD => String::from("safe_modulo"),
-            BinaryOp::BITAND => String::from("bit_and"),
-            BinaryOp::BITOR => String::from("bit_or"),
-            BinaryOp::BITXOR => String::from("bit_xor"),
-        }
-    }
-
-    pub fn to_string_self_safe(&self) -> String {
-        match self {
-            BinaryOp::ADD => String::from("safe_self_add"),
-            BinaryOp::SUB => String::from("safe_self_sub"),
-            BinaryOp::MUL => String::from("safe_self_mul"),
-            BinaryOp::DIV => String::from("safe_self_div"),
-            BinaryOp::MOD => String::from("safe_self_modulo"),
-            BinaryOp::BITAND => String::from("bit_self_and"),
-            BinaryOp::BITOR => String::from("bit_self_or"),
-            BinaryOp::BITXOR => String::from("bit_self_xor"),
+            BinaryOp::ADD => String::from("wrapping_add"),
+            BinaryOp::SUB => String::from("wrapping_sub"),
+            BinaryOp::MUL => String::from("wrapping_mul"),
+            BinaryOp::DIV => String::from("checked_div"),
+            BinaryOp::MOD => String::from("checked_rem"),
+            BinaryOp::SHL => String::from("wrapping_shl"),
+            BinaryOp::SHR => String::from("wrapping_shr"),
+            BinaryOp::BITAND | BinaryOp::BITOR | BinaryOp::BITXOR => {
+                panic!("Bitwise ops are emitted as native operators")
+            }
         }
     }
 }
@@ -165,6 +210,104 @@ impl ToString for BinaryOp {
             BinaryOp::BITAND => String::from("&"),
             BinaryOp::BITOR => String::from("|"),
             BinaryOp::BITXOR => String::from("^"),
+            BinaryOp::SHL => String::from("<<"),
+            BinaryOp::SHR => String::from(">>"),
+        }
+    }
+}
+
+pub enum CastSource {
+    Int(ArithmeticExpr),
+    Bool(BoolExpr),
+}
+
+pub struct CastExpr {
+    source: CastSource,
+    target: IntTypeID,
+}
+
+impl CastExpr {
+    pub fn new_from_int(source: ArithmeticExpr, target: IntTypeID) -> Self {
+        CastExpr {
+            source: CastSource::Int(source),
+            target,
+        }
+    }
+
+    pub fn new_from_bool(source: BoolExpr, target: IntTypeID) -> Self {
+        CastExpr {
+            source: CastSource::Bool(source),
+            target,
+        }
+    }
+
+    pub fn as_arith_expr(self) -> ArithmeticExpr {
+        ArithmeticExpr::Cast(Box::new(self))
+    }
+
+    pub fn get_type(&self) -> TypeID {
+        TypeID::IntType(self.target)
+    }
+}
+
+impl ToString for CastExpr {
+    // Both the source expression and the whole cast are parenthesized:
+    // `as` has tricky precedence (e.g. `a as u8 + b` binds as
+    // `(a as u8) + b`), and a fully parenthesized form sidesteps it.
+    fn to_string(&self) -> String {
+        match &self.source {
+            CastSource::Int(expr) => {
+                format!("(({}) as {})", expr.to_string(), self.target.to_string())
+            }
+            // bool only casts to numeric types directly via an integer step;
+            // chaining through u8 keeps it valid for every target width.
+            CastSource::Bool(expr) => {
+                format!(
+                    "(({}) as u8 as {})",
+                    expr.to_string(),
+                    self.target.to_string()
+                )
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub enum UnaryOp {
+    NOT,
+    NEG,
+}
+
+impl UnaryOp {
+    pub const ALL: &'static [Self] = &[Self::NOT, Self::NEG];
+}
+
+pub struct UnaryExpr {
+    expr: ArithmeticExpr,
+    op: UnaryOp,
+}
+
+impl UnaryExpr {
+    pub fn new(expr: ArithmeticExpr, op: UnaryOp) -> Self {
+        UnaryExpr { expr, op }
+    }
+
+    pub fn as_arith_expr(self) -> ArithmeticExpr {
+        ArithmeticExpr::Unary(Box::new(self))
+    }
+
+    pub fn get_type(&self) -> TypeID {
+        self.expr.get_type()
+    }
+
+    // Negation must be wrapping_neg, never a plain unary minus: `-iN::MIN`
+    // panics under overflow-checks=on and wraps when off, so a bare `-`
+    // would create false divergences across fuzz configs. wrapping_neg is
+    // identical in every config (and is defined for unsigned types too).
+    pub fn to_string_safe(&self) -> String {
+        match self.op {
+            UnaryOp::NOT => format!("(!({}))", self.expr.to_string()),
+            UnaryOp::NEG => format!("(({}).wrapping_neg())", self.expr.to_string()),
         }
     }
 }
@@ -296,5 +439,54 @@ mod test {
     fn int_expr_has_correct_string_representation() {
         let value = IntValue::I32(5);
         assert_eq!(IntExpr::new(value).to_string(), "5i32");
+    }
+
+    #[test]
+    fn int_cast_has_correct_string_representation() {
+        let source = ArithmeticExpr::new_from_int_expr(IntExpr::new_i32(30));
+        let cast = CastExpr::new_from_int(source, IntTypeID::U8);
+
+        assert_eq!(cast.get_type(), TypeID::IntType(IntTypeID::U8));
+        assert_eq!(cast.to_string(), "((30i32) as u8)");
+    }
+
+    #[test]
+    fn bool_cast_has_correct_string_representation() {
+        use crate::program::expr::bool_expr::BoolValue;
+        let source = BoolValue::new(true).as_bool_expr();
+        let cast = CastExpr::new_from_bool(source, IntTypeID::I64);
+
+        assert_eq!(cast.get_type(), TypeID::IntType(IntTypeID::I64));
+        assert_eq!(cast.to_string(), "((true) as u8 as i64)");
+    }
+
+    #[test]
+    fn unary_not_has_correct_string_representation() {
+        let expr = ArithmeticExpr::new_from_int_expr(IntExpr::new_u16(7));
+        let unary = UnaryExpr::new(expr, UnaryOp::NOT);
+
+        assert_eq!(unary.get_type(), TypeID::IntType(IntTypeID::U16));
+        assert_eq!(unary.to_string_safe(), "(!(7u16))");
+    }
+
+    #[test]
+    fn unary_neg_uses_wrapping_neg() {
+        let expr = ArithmeticExpr::new_from_int_expr(IntExpr::new_i8(5));
+        let unary = UnaryExpr::new(expr, UnaryOp::NEG);
+
+        assert_eq!(unary.to_string_safe(), "((5i8).wrapping_neg())");
+    }
+
+    #[test]
+    fn shifts_use_wrapping_form_with_u32_amount() {
+        let left = ArithmeticExpr::new_from_int_expr(IntExpr::new_i32(30));
+        let right = ArithmeticExpr::new_from_int_expr(IntExpr::new_u64(5));
+        let shl = BinaryExpr::new(left, right, BinaryOp::SHL);
+        assert_eq!(shl.to_string_safe(), "(30i32).wrapping_shl((5u64) as u32)");
+
+        let left = ArithmeticExpr::new_from_int_expr(IntExpr::new_u8(3));
+        let right = ArithmeticExpr::new_from_int_expr(IntExpr::new_i16(2));
+        let shr = BinaryExpr::new(left, right, BinaryOp::SHR);
+        assert_eq!(shr.to_string_safe(), "(3u8).wrapping_shr((2i16) as u32)");
     }
 }

@@ -1,21 +1,31 @@
-use rand::{
-    distributions::{Distribution, Standard, WeightedIndex},
-    Rng,
-};
-use strum::IntoEnumIterator;
-use strum_macros::{EnumCount, EnumIter};
+use crate::rng::{RandGen, Rng, WeightedIndex};
 
 use super::super::EnumWeights;
 
-#[derive(EnumCount, EnumIter, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum ArithmeticExprVariants {
     Int,
     Binary,
+    Cast,
+    Unary,
+    ArrayIndex,
     Var,
     Func,
 }
 
-#[derive(EnumCount, EnumIter, Clone, Copy)]
+impl ArithmeticExprVariants {
+    pub const ALL: &'static [Self] = &[
+        Self::Int,
+        Self::Binary,
+        Self::Cast,
+        Self::Unary,
+        Self::ArrayIndex,
+        Self::Var,
+        Self::Func,
+    ];
+}
+
+#[derive(Clone, Copy)]
 pub enum BoolExprVariants {
     Bool,
     Binary,
@@ -25,42 +35,51 @@ pub enum BoolExprVariants {
     Func,
 }
 
-#[derive(EnumCount, EnumIter, Clone, Copy)]
+impl BoolExprVariants {
+    pub const ALL: &'static [Self] = &[
+        Self::Bool,
+        Self::Binary,
+        Self::Comparison,
+        Self::Negation,
+        Self::Var,
+        Self::Func,
+    ];
+}
+
+#[derive(Clone, Copy)]
 pub enum StructExprVariants {
     Literal,
     Var,
     Func,
 }
 
-impl Distribution<ArithmeticExprVariants> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ArithmeticExprVariants {
-        let choices: Vec<ArithmeticExprVariants> = ArithmeticExprVariants::iter().collect();
+impl StructExprVariants {
+    pub const ALL: &'static [Self] = &[Self::Literal, Self::Var, Self::Func];
+}
 
+impl RandGen for ArithmeticExprVariants {
+    fn rand_gen<R: Rng>(rng: &mut R) -> ArithmeticExprVariants {
         let dist = WeightedIndex::new(ArithmeticExprVariants::weights()).unwrap();
         let idx = dist.sample(rng);
 
-        choices[idx]
+        ArithmeticExprVariants::ALL[idx]
     }
 }
 
-impl Distribution<BoolExprVariants> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BoolExprVariants {
-        let choices: Vec<BoolExprVariants> = BoolExprVariants::iter().collect();
-
+impl RandGen for BoolExprVariants {
+    fn rand_gen<R: Rng>(rng: &mut R) -> BoolExprVariants {
         let dist = WeightedIndex::new(BoolExprVariants::weights()).unwrap();
         let idx = dist.sample(rng);
 
-        choices[idx]
+        BoolExprVariants::ALL[idx]
     }
 }
 
-impl Distribution<StructExprVariants> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> StructExprVariants {
-        let choices: Vec<StructExprVariants> = StructExprVariants::iter().collect();
-
+impl RandGen for StructExprVariants {
+    fn rand_gen<R: Rng>(rng: &mut R) -> StructExprVariants {
         let dist = WeightedIndex::new(StructExprVariants::weights()).unwrap();
         let idx = dist.sample(rng);
 
-        choices[idx]
+        StructExprVariants::ALL[idx]
     }
 }
