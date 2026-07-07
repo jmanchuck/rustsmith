@@ -1,7 +1,7 @@
 /// A set of commonly used functions to filter variables from the scope
 use std::{cell::RefCell, rc::Rc};
 
-use crate::program::types::{BorrowStatus, BorrowTypeID, TypeID};
+use crate::program::types::{BorrowStatus, BorrowTypeID, IntTypeID, TypeID};
 
 use super::{scope::Scope, scope_entry::ScopeEntry};
 
@@ -31,6 +31,13 @@ pub fn is_type_filter(type_id: TypeID) -> ScopeBorrowClosure {
 pub fn is_int_type_filter() -> ScopeBorrowClosure {
     Box::new(move |scope_entry, _| match scope_entry.get_type() {
         TypeID::IntType(_) => true,
+        _ => false,
+    })
+}
+
+pub fn is_array_of_elem_filter(elem: IntTypeID) -> ScopeBorrowClosure {
+    Box::new(move |scope_entry, _| match scope_entry.get_type() {
+        TypeID::ArrayType(array_type) => array_type.elem == elem,
         _ => false,
     })
 }

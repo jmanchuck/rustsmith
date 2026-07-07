@@ -8,6 +8,7 @@ pub enum ArithmeticExprVariants {
     Binary,
     Cast,
     Unary,
+    ArrayIndex,
     Var,
     Func,
 }
@@ -18,6 +19,7 @@ impl ArithmeticExprVariants {
         Self::Binary,
         Self::Cast,
         Self::Unary,
+        Self::ArrayIndex,
         Self::Var,
         Self::Func,
     ];

@@ -1,8 +1,9 @@
+use crate::generator::consts;
 use crate::program::expr::arithmetic_expr::BinaryOp;
 use crate::program::expr::arithmetic_expr::IntValue;
 use crate::program::expr::arithmetic_expr::UnaryOp;
 use crate::program::expr::bool_expr::{BoolOp, ComparisonOp};
-use crate::program::types::{BorrowTypeID, IntTypeID, TypeIDVariants};
+use crate::program::types::{ArrayTypeID, BorrowTypeID, IntTypeID, TypeIDVariants};
 
 use crate::rng::{RandGen, Rng, SliceChoose};
 
@@ -85,6 +86,14 @@ impl IntValue {
             IntTypeID::U64 => IntValue::U64(rng.gen::<u64>()),
             IntTypeID::U128 => IntValue::U128(rng.gen::<u128>()),
         }
+    }
+}
+
+impl RandGen for ArrayTypeID {
+    fn rand_gen<R: Rng>(rng: &mut R) -> ArrayTypeID {
+        let elem: IntTypeID = rng.gen();
+        let len = *consts::ARRAY_LENS.choose(rng).unwrap();
+        ArrayTypeID::new(elem, len)
     }
 }
 

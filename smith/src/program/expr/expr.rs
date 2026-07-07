@@ -1,6 +1,7 @@
 use crate::program::var::Var;
 
 use super::arithmetic_expr::ArithmeticExpr;
+use super::array_expr::ArrayExpr;
 use super::bool_expr::BoolExpr;
 use super::borrow_expr::BorrowExpr;
 use super::func_call_expr::FunctionCallExpr;
@@ -11,6 +12,7 @@ pub enum Expr {
     Arithmetic(ArithmeticExpr),
     Boolean(BoolExpr),
     Struct(StructExpr),
+    Array(ArrayExpr),
     Variable(Var),
     Borrow(Box<BorrowExpr>),
     Raw(RawExpr),
@@ -23,6 +25,7 @@ impl ToString for Expr {
             Expr::Arithmetic(s) => s.to_string(),
             Expr::Boolean(s) => s.to_string(),
             Expr::Struct(s) => s.to_string(),
+            Expr::Array(s) => s.to_string(),
             Expr::Variable(s) => s.to_string(),
             Expr::Borrow(s) => (*s).to_string(),
             Expr::Raw(s) => s.to_string(),

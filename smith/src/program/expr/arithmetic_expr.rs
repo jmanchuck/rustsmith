@@ -1,4 +1,6 @@
-use super::{bool_expr::BoolExpr, expr::Expr, func_call_expr::FunctionCallExpr};
+use super::{
+    array_expr::ArrayIndexExpr, bool_expr::BoolExpr, expr::Expr, func_call_expr::FunctionCallExpr,
+};
 use crate::program::{
     types::{IntTypeID, TypeID},
     var::Var,
@@ -8,6 +10,7 @@ pub enum ArithmeticExpr {
     Binary(Box<BinaryExpr>),
     Cast(Box<CastExpr>),
     Unary(Box<UnaryExpr>),
+    ArrayIndex(Box<ArrayIndexExpr>),
     Var(Var),
     Func(FunctionCallExpr),
 }
@@ -31,6 +34,7 @@ impl ArithmeticExpr {
             Self::Binary(s) => s.get_type(),
             Self::Cast(s) => s.get_type(),
             Self::Unary(s) => s.get_type(),
+            Self::ArrayIndex(s) => s.get_type(),
             Self::Var(s) => s.get_type(),
             Self::Func(s) => s.get_type(),
         }
@@ -44,6 +48,7 @@ impl ToString for ArithmeticExpr {
             Self::Binary(s) => (*s).to_string_safe(),
             Self::Cast(s) => (*s).to_string(),
             Self::Unary(s) => (*s).to_string_safe(),
+            Self::ArrayIndex(s) => (*s).to_string(),
             Self::Var(s) => s.to_string(),
             Self::Func(s) => s.to_string(),
         }

@@ -20,6 +20,10 @@ pub const MAX_CONDITIONAL_BRANCHES: u8 = 2;
 pub const MAX_CONDITIONAL_DEPTH: u32 = 2; // Only refers to conditional statements
 pub const MAX_LOOP_DEPTH: u32 = 2;
 
+// Fixed-size array lengths drawn for array lets. Small so element-wise
+// checksum folds stay cheap and index modulo guards use small literals.
+pub const ARRAY_LENS: &'static [usize] = &[2, 3, 4, 5, 6, 7, 8];
+
 // Per-loop iteration cap. Every loop gets a stopper; in addition a global
 // fuel counter (see the emitted prelude) bounds total loop iterations
 // program-wide, since function-calls-inside-loops multiply per-loop caps.

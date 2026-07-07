@@ -13,12 +13,12 @@ use crate::{
             iter_expr::IterRange,
         },
         stmt::{
-            assign_stmt::AssignStmt, block_stmt::BlockStmt, conditional_stmt::ConditionalStmt,
-            expr_stmt::ExprStmt, for_loop_stmt::ForLoopStmt, let_stmt::LetStmt,
-            op_assign_stmt::OpAssignStmt, return_stmt::ReturnStmt, stmt::Stmt,
+            array_assign_stmt::ArrayAssignStmt, assign_stmt::AssignStmt, block_stmt::BlockStmt,
+            conditional_stmt::ConditionalStmt, expr_stmt::ExprStmt, for_loop_stmt::ForLoopStmt,
+            let_stmt::LetStmt, op_assign_stmt::OpAssignStmt, return_stmt::ReturnStmt, stmt::Stmt,
         },
         struct_template::StructTemplate,
-        types::{BorrowTypeID, IntTypeID, TypeID},
+        types::{ArrayTypeID, BorrowTypeID, IntTypeID, TypeID},
         var::Var,
     },
 };
@@ -118,20 +118,29 @@ impl<'a> StmtGenerator<'a> {
     // assigning to the borrowed variable right after the reference's last
     // use). The referenced locals are folded directly instead. Struct locals
     // are skipped because they may have been moved.
+    //
+    // Array locals are folded element-wise via `.iter()` rather than by
+    // index, so the folds cannot mask a bounds-check-elision bug in the
+    // guarded index reads/writes being tested.
     fn append_checksum_folds(stmt_list: &mut Vec<Stmt>) {
         let mut folds: Vec<Stmt> = Vec::new();
         for stmt in stmt_list.iter().rev() {
             if let Stmt::LetStatement(let_stmt) = stmt {
                 let var = let_stmt.var();
-                match var.get_type() {
-                    TypeID::IntType(_) | TypeID::BoolType => (),
-                    _ => continue,
-                }
                 if var.get_borrow_type() != BorrowTypeID::None {
                     continue;
                 }
-                let fold = RawExpr::new(format!("cs({} as u128)", var.get_name())).as_expr();
-                folds.push(ExprStmt::new(fold).as_stmt());
+                let fold = match var.get_type() {
+                    TypeID::IntType(_) | TypeID::BoolType => {
+                        RawExpr::new(format!("cs({} as u128)", var.get_name()))
+                    }
+                    TypeID::ArrayType(_) => RawExpr::new(format!(
+                        "for e in {}.iter() {{ cs(*e as u128); }}",
+                        var.get_name()
+                    )),
+                    _ => continue,
+                };
+                folds.push(ExprStmt::new(fold.as_expr()).as_stmt());
             }
         }
         stmt_list.extend(folds);
@@ -185,7 +194,7 @@ impl<'a> StmtGenerator<'a> {
             }
             StmtVariants::AssignStatement => {
                 if context.borrow().scope.borrow().mut_count() > 0 {
-                    Some(self.assign_stmt(context, rng).as_stmt())
+                    Some(self.assign_stmt(context, rng))
                 } else {
                     None
                 }
@@ -237,8 +246,13 @@ impl<'a> StmtGenerator<'a> {
     }
 
     pub fn let_stmt<R: Rng>(&mut self, context: Rc<RefCell<Context>>, rng: &mut R) -> LetStmt {
-        let rand_type_id = self.struct_table.rand_type(rng);
-        let rand_borrow_type_id: BorrowTypeID = rng.gen();
+        let rand_type_id = self.struct_table.rand_type_for_let(rng);
+        // Arrays are only ever let-bound by value (phase 1: no array borrows).
+        let rand_borrow_type_id: BorrowTypeID = if let TypeID::ArrayType(_) = rand_type_id {
+            BorrowTypeID::None
+        } else {
+            rng.gen()
+        };
 
         let expr_generator = ExprGenerator::new(
             self.struct_table,
@@ -376,11 +390,7 @@ impl<'a> StmtGenerator<'a> {
         for_loop_stmt
     }
 
-    pub fn assign_stmt<R: Rng>(
-        &mut self,
-        context: Rc<RefCell<Context>>,
-        rng: &mut R,
-    ) -> AssignStmt {
+    pub fn assign_stmt<R: Rng>(&mut self, context: Rc<RefCell<Context>>, rng: &mut R) -> Stmt {
         let mut_filter = Filters::new().with_filters(vec![is_mut_or_mut_ref_filter()]);
         let mutables = mut_filter.filter(&context.borrow().scope);
 
@@ -399,6 +409,21 @@ impl<'a> StmtGenerator<'a> {
             .scope
             .borrow_mut()
             .func_mut_borrow(var_name);
+
+        // Mutable arrays mostly receive guarded element writes; occasionally
+        // the whole array is reassigned through the ordinary path below.
+        if let TypeID::ArrayType(array_type) = scope_entry.get_type() {
+            if rng.gen_range(0u32..4) > 0 {
+                let stmt = self.array_element_assign_stmt(
+                    Rc::clone(&context),
+                    var_name.clone(),
+                    array_type,
+                    rng,
+                );
+                context.borrow_mut().leave_scope();
+                return stmt;
+            }
+        }
 
         let expr_generator = ExprGenerator::new(
             self.struct_table,
@@ -424,7 +449,46 @@ impl<'a> StmtGenerator<'a> {
         let deref =
             scope_entry.is_borrow_type(BorrowTypeID::MutRef) && !left_var.get_name().contains('.');
 
-        AssignStmt::new(left_var, expr, deref)
+        AssignStmt::new(left_var, expr, deref).as_stmt()
+    }
+
+    // Guarded element write to a mutable in-scope array: either the plain
+    // form `arr[((idx) as usize) % LEN] = expr;` or one of the op-assign
+    // wrapping forms (see ArrayAssignStmt). Called inside the assign
+    // statement's temporary scope.
+    fn array_element_assign_stmt<R: Rng>(
+        &mut self,
+        context: Rc<RefCell<Context>>,
+        array_name: String,
+        array_type: ArrayTypeID,
+        rng: &mut R,
+    ) -> Stmt {
+        let idx_type: IntTypeID = rng.gen();
+        let idx_generator = ExprGenerator::new(
+            self.struct_table,
+            Rc::clone(&context),
+            idx_type.as_type(),
+            BorrowTypeID::None,
+        );
+        context.borrow_mut().reset_expr_depth();
+        let index: ArithmeticExpr = idx_generator.expr(rng).into();
+
+        let elem_generator = ExprGenerator::new(
+            self.struct_table,
+            Rc::clone(&context),
+            array_type.elem.as_type(),
+            BorrowTypeID::None,
+        );
+        context.borrow_mut().reset_expr_depth();
+        let rhs: ArithmeticExpr = elem_generator.expr(rng).into();
+
+        let op = if rng.gen::<bool>() {
+            Some(rng.gen::<BinaryOp>())
+        } else {
+            None
+        };
+
+        ArrayAssignStmt::new(array_name, array_type, index, rhs, op).as_stmt()
     }
 
     pub fn conditional_stmt<R: Rng>(
@@ -580,5 +644,31 @@ impl<'a> StmtGenerator<'a> {
             expr_generator.func_call_expr_from_template(func_entry.get_template(), rng);
 
         ExprStmt::new(func_call_expr.as_expr())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::program::expr::arithmetic_expr::IntExpr;
+    use crate::program::types::ArrayTypeID;
+
+    #[test]
+    fn checksum_folds_arrays_element_wise_via_iter() {
+        let int_var = Var::new(IntTypeID::U16.as_type(), "var_0".to_string(), false);
+        let int_let = LetStmt::new(int_var, IntExpr::new_u16(3).as_expr()).as_stmt();
+
+        let array_type = ArrayTypeID::new(IntTypeID::I8, 2);
+        let array_var = Var::new(array_type.as_type(), "var_1".to_string(), true);
+        let array_expr = RawExpr::new("[1i8, 2i8]".to_string()).as_expr();
+        let array_let = LetStmt::new(array_var, array_expr).as_stmt();
+
+        let mut stmt_list = vec![int_let, array_let];
+        StmtGenerator::append_checksum_folds(&mut stmt_list);
+
+        let rendered: Vec<String> = stmt_list.iter().map(|s| s.to_string()).collect();
+        assert_eq!(rendered.len(), 4);
+        assert_eq!(rendered[2], "for e in var_1.iter() { cs(*e as u128); };");
+        assert_eq!(rendered[3], "cs(var_0 as u128);");
     }
 }

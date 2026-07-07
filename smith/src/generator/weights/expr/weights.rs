@@ -13,6 +13,7 @@ impl EnumWeights for ArithmeticExprVariants {
             ArithmeticExprVariants::Binary => 4,
             ArithmeticExprVariants::Cast => 2,
             ArithmeticExprVariants::Unary => 2,
+            ArithmeticExprVariants::ArrayIndex => 2,
             ArithmeticExprVariants::Var => 2,
             ArithmeticExprVariants::Func => 2,
         }
